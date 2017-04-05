@@ -1,0 +1,24 @@
+
+# TRAIN AND VALID DATASET LOCATION
+TRAIN_IMG_DIR: '../Dataset/Train/'
+VALID_IMG_DIR: '../Dataset/Val/'
+TEST_IMG_DIR:  '../Dataset/Test/'
+
+# SAVE FILES LOCATION
+SAVE_MODEL: '../Pretrained/Model.pkl'
+
+# CAFFE STYLE TRAIN AND VALIDATION LABELS
+TRAIN_DATA_FILENAME:         './dataset_metadata/train.txt'
+VALID_DATA_FILENAME:         './dataset_metadata/valid.txt'
+TEST_DATA_FILENAME:          './dataset_metadata/test.txt'
+
+# SYNSETS
+SYNSETS:    'synsets.txt'
+
+# FEATURE EXTRACTION
+# HOG
+HOG_CELL_SIZE  = (8, 8)
+HOG_BLOCK_SIZE = (2, 2)
+HOG_NUM_BIN    = 9
+
+
