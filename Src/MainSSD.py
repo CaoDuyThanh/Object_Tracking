@@ -1,10 +1,9 @@
-import numpy
-import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import caffe
-import math
+import matplotlib.pyplot as plt
+
 from SSDModel import SSDModel
-from DefaultBox import *
+from Utils.DefaultBox import *
+
 
 def ProposedMethod():
     ssdmodel = SSDModel()
@@ -43,14 +42,15 @@ def prep_image(url):
     return im
 
 def TestModel(ssdmodel):
-    image_urls = [ '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/Test/VOCdevkit/VOC2007/JPEGImages/003304.jpg',
-                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/Test/VOCdevkit/VOC2007/JPEGImages/004932.jpg',
-                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/Test/VOCdevkit/VOC2007/JPEGImages/004934.jpg',
-                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/Test/VOCdevkit/VOC2007/JPEGImages/004835.jpg',
-                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/Test/VOCdevkit/VOC2007/JPEGImages/004936.jpg',
-                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/Test/VOCdevkit/VOC2007/JPEGImages/004937.jpg',
-                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/Test/VOCdevkit/VOC2007/JPEGImages/004938.jpg',
-                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/Test/VOCdevkit/VOC2007/JPEGImages/004939.jpg']
+    image_urls = [ '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/VOC2012/Train/JPEGImages/2007_001960.jpg',
+                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/VOC2007/Test/JPEGImages/003304.jpg',
+                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/VOC2007/Test/JPEGImages/004932.jpg',
+                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/VOC2007/Test/JPEGImages/004934.jpg',
+                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/VOC2007/Test/JPEGImages/004835.jpg',
+                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/VOC2007/Test/JPEGImages/004936.jpg',
+                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/VOC2007/Test/JPEGImages/004937.jpg',
+                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/VOC2007/Test/JPEGImages/004938.jpg',
+                   '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/VOC/VOC2007/Test/JPEGImages/004939.jpg']
 
     VGG_MEAN = numpy.asarray([103.939, 116.779, 123.68])
     VGG_MEAN = numpy.reshape(VGG_MEAN, (1, 3, 1, 1))
@@ -77,9 +77,13 @@ def TestModel(ssdmodel):
             im = numpy.reshape(im, (1, 3, 300, 300))
             im = numpy.asarray(im - VGG_MEAN, dtype=numpy.float32)
 
-            output = ssdmodel.TestNetwork(im)
+            im2 = numpy.zeros((2, 3, 300, 300), dtype=numpy.float32)
+            im2[0, :, :, :] = im
+            im2[1, :, :, :] = im
 
-            bestBox = defaultBox.Bbox(output[0], output[1])
+            output = ssdmodel.TestNetwork(im2)
+
+            bestBox = defaultBox.Bbox(output[0][1], output[1][1])
 
             fig, ax = plt.subplots(1)
             ax.imshow(rawIm)
