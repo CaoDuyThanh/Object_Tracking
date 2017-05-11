@@ -17,7 +17,7 @@ class NormalizeLayer():
                     )
 
         input2    = T.sqr(input)
-        inputSum  = input2.sum(axis = 1)
+        inputSum  = input2.sum(axis = 1, keepdims = True)
         inputSqrt = T.sqrt(inputSum)
 
         output_shape = T.shape(input)
