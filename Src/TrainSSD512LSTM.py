@@ -14,14 +14,14 @@ from Utils.BBoxHelper import *
 ########################################################################################################################
 # TRAINING HYPER PARAMETER
 NUM_EPOCH         = 10
-DISPLAY_FREQUENCY = 10
+DISPLAY_FREQUENCY = 10;     INFO_DISPLAY = 'Epoch = %d, iteration = %d, cost = %f, folderName = %s, objectId = %d'
 SAVE_FREQUENCY    = 150
 
 # LSTM NETWORK CONFIG
-NUM_TRUNCATE      = 10
+NUM_TRUNCATE      = 5
 NUM_HIDDEN        = 512
-INPUTS_SIZE       = [256]
-OUTPUTS_SIZE      = [6, 24]
+INPUTS_SIZE       = [257]
+OUTPUTS_SIZE      = [1]
 SEQUENCE_TRAIN    = NUM_TRUNCATE * 2
 
 # BOUNDING BOX HYPER
@@ -37,8 +37,8 @@ SAVE_PATH       = '../Pretrained/SSD512/LSTM_SSD_Epoch=%d_Iter=%d.pkl'
 
 # LOAD MODEL PATH
 LOAD_MODEL_PATH = '../Pretrained/SSD512/LSTM_SSD_Epoch=%d_Iter=%d.pkl'
-START_EPOCH     = 1
-START_ITERATION = 7050
+START_EPOCH     = 0
+START_ITERATION = 0
 
 #  GLOBAL VARIABLES
 Dataset           = None
@@ -66,7 +66,7 @@ def LoadDataset():
 ########################################################################################################################
 def CreateSSDExtractFactory():
     global FeatureFactory, DefaultBboxs, BoxsVariances
-    FeatureFactory = SSD512FeaExtraction(batchSize = NUM_TRUNCATE)
+    FeatureFactory = SSD512FeaExtraction(batchSize = NUM_TRUNCATE + 1)
     FeatureFactory.LoadCaffeModel('../Models/SSD_512x512/VOC0712/deploy.prototxt',
                                   '../Models/SSD_512x512/VOC0712/VGG_coco_SSD_512x512_iter_360000.caffemodel')
     FeatureFactory.LoadEncodeLayers('../Preprocessing/SSD512/ssd512_conv4_3_norm_encode.pkl',
@@ -107,83 +107,28 @@ def CreateLSTMModel():
 #    UTILITIES (MANY DIRTY CODES)                                                                                      #
 #                                                                                                                      #
 ########################################################################################################################
-def CompareBboxs(defaultBboxs, groundTruths):
-    preds = []
-    gts   = []
+def CreateHeatmapSequence(defaultBboxs, groundTruths):
+    heatmapSequence = []
     for idx, groundTruth in enumerate(groundTruths):
-        pred, gt = CreateOutput(defaultBboxs, groundTruth)
-        preds.append(pred)
-        gts.append(gt)
+        heatmap = CreateHeatmap(defaultBboxs, groundTruth)
+        heatmapSequence.append(heatmap)
 
     # Convert to numpy array
-    preds = numpy.asarray(preds, dtype='float32')
-    gts   = numpy.asarray(gts, dtype='float32')
-    return preds, gts
+    heatmapSequence = numpy.asarray(heatmapSequence, dtype='float32')
+    return heatmapSequence
 
-
-def CreateOutput(defaultBboxs, groundTruth):
-    pred = numpy.zeros((defaultBboxs.shape[0], defaultBboxs.shape[1], 1),
-                        dtype = 'float32')
-    gt   = numpy.zeros(defaultBboxs.shape,
-                        dtype = 'float32')
+def CreateHeatmap(defaultBboxs, groundTruth):
+    heatmap = numpy.zeros((defaultBboxs.shape[0], 1), dtype = 'float32')
     for bboxIdx, dfbbox in enumerate(defaultBboxs):
+        check = False
         for archorboxIdx, archorBox in enumerate(dfbbox):
-            minInterestBox, maxInterestBox = InterestBox2(archorBox, groundTruth, ALPHA, BETA)
-            if minInterestBox >= 0.5 and maxInterestBox >= 0.1:
-            # if InterestBox1(archorBox, groundTruth, ALPHA, BETA):
-                pred[bboxIdx][archorboxIdx] = 1
-                gt[bboxIdx][archorboxIdx]   = [(groundTruth[0] - archorBox[0]) / archorBox[2],
-                                               (groundTruth[1] - archorBox[1]) / archorBox[3],
-                                                math.log(groundTruth[2] / archorBox[2]),
-                                                math.log(groundTruth[3] / archorBox[3])]
-    return [pred, gt]
-
-def CheckPred(defaultBboxs, groundTruth, overlapThres):
-    for bboxIdx, dfbbox in enumerate(defaultBboxs):
-        for archorboxIdx, archorBox in enumerate(dfbbox):
-            minInterestBox, maxInterestBox = InterestBox2(archorBox, groundTruth, ALPHA, BETA)
-            if minInterestBox >= 0.5 and maxInterestBox >= 0.1:
-            # if InterestBox1(archorBox, groundTruth, ALPHA, BETA):
-                return True
-    return False
-
-
-def GetFeatures(features, preds):
-    featuresgts = []
-    for (feature, pred) in zip(features, preds):
-        ftgt = []
-        for idx in range(feature.shape[0]):
-            p = numpy.max(pred[idx])
-
-            if p == 1:
-                ftgt.append(feature[idx])
-        featuresgts.append(ftgt)
-    return featuresgts
-
-
-def GetRandomFeatures(features):
-    featuresgt = numpy.zeros((features.__len__(), features[0][0].shape[0]), dtype='float32')
-    for idx in range(features.__len__()):
-        featuresgt[idx] = features[idx][numpy.random.randint(features[idx].__len__())]
-
-    return featuresgt
-
-
-def FilterBboxs(imsPath,
-                bboxs,
-                defaultBboxs = None,
-                overlapThres = 0.5):
-    newImsPath = []
-    newBboxs   = []
-    count      = 0
-    for (imPath, bbox) in zip(imsPath, bboxs):
-        count += 1
-        if CheckPred(defaultBboxs, bbox, overlapThres) == True:
-            newImsPath.append(imPath)
-            newBboxs.append(bbox)
-        print "\r    Filter metadata: %d / %d. Filted metadata: %d sample(s)" % (count, bboxs.__len__(), newBboxs.__len__()),
-    print "Filter completed !"
-    return newImsPath, newBboxs
+            minInterestBox, maxInterestBox = InterestBox(archorBox, groundTruth, ALPHA, BETA)
+            if minInterestBox >= 0.25:
+                check = True
+                break
+        if check == True:
+            heatmap[bboxIdx] = 1
+    return heatmap
 
 ########################################################################################################################
 #                                                                                                                      #
@@ -212,19 +157,15 @@ def TrainModel():
         file.close()
         print ('Load model !')
 
-    RatioPosNeg = 2.
-
     # Train each folder in train folder
     iter = START_ITERATION
     costs = []
-    predictPostAves = []
-    predictLocAves  = []
-    predictNegAves  = []
 
+    # Training start from here..........................................................................................
     Dataset.DataOpts['data_phase'] = 'train'
     allFolderNames = Dataset.GetAllFolderNames()
     for epoch in xrange(0, NUM_EPOCH):
-        if epoch < START_EPOCH:
+        if epoch < START_EPOCH:     # We continue to train model from START_EPOCH
             continue
         for folderIdx, folderName in enumerate(allFolderNames):
             Dataset.DataOpts['data_folder_name'] = folderName
@@ -238,95 +179,62 @@ def TrainModel():
                 imsPath, bboxs = Dataset.GetSequenceBy(occluderThres = 0.5)
 
                 # If number image in sequence less than NUM_TRUNCATE => we choose another sequence to train
-                if (imsPath.__len__() < NUM_TRUNCATE):
+                if (imsPath.__len__() < NUM_TRUNCATE + 1):
                     continue
-
-                # startIdx = numpy.random.randint(imsPath.__len__() - SEQUENCE_TRAIN + 1)
-                # endIdx   = startIdx + SEQUENCE_TRAIN
-                # imsPath  = imsPath[startIdx: endIdx]
-                # bboxs    = bboxs[startIdx: endIdx]
-
-                imsPath, bboxs = FilterBboxs(imsPath,
-                                             bboxs,
-                                             defaultBboxs = DefaultBboxs,
-                                             overlapThres = 0.5)
 
                 # Else train the sequence ...................
                 S = startStateS;    C = startStateC
                 NUM_BATCH = (imsPath.__len__()) // NUM_TRUNCATE
                 for batchId in range(NUM_BATCH):
+                    print ('\r Load mini sequence !.....................')
                     # Get batch
-                    imsPathBatch = imsPath[batchId * NUM_TRUNCATE : (batchId + 1) * NUM_TRUNCATE]
-                    bboxsBatch   = bboxs[batchId * NUM_TRUNCATE : (batchId + 1) * NUM_TRUNCATE]
+                    imsPathSequence = imsPath[batchId * NUM_TRUNCATE : (batchId + 1) * NUM_TRUNCATE + 1]
+                    bboxsSequence   = bboxs  [batchId * NUM_TRUNCATE : (batchId + 1) * NUM_TRUNCATE + 1]
 
                     # Extract feature and prepare bounding box before training....
-                    batchFeatures          = FeatureFactory.ExtractFeature(imsPath = imsPathBatch)   # Extract batch features
-                    batchPreds, batchBboxs = CompareBboxs(DefaultBboxs, bboxsBatch)
+                    featureSequence = FeatureFactory.ExtractFeature(imsPath = imsPathSequence)   # Extract sequence features
+                    heatmapSequence = CreateHeatmapSequence(DefaultBboxs, bboxsSequence)
 
-                    inputBatchFeatures   = batchFeatures[0 : NUM_TRUNCATE]
-                    outputPreds          = batchPreds[0 : NUM_TRUNCATE]
-                    outputBboxs          = batchBboxs[0 : NUM_TRUNCATE]
+                    featureSequence  = featureSequence[0: NUM_TRUNCATE]
+                    heatmapXSequence = heatmapSequence[0: NUM_TRUNCATE]
+                    heatmapYSequence = heatmapSequence[1: NUM_TRUNCATE + 1]
+                    print ('\r Load mini sequence ! Done !')
 
-                    numFeaturesPerIm   = batchFeatures.shape[1]
-                    numAnchorBoxPerLoc = DefaultBboxs.shape[1]
+                    print ('\r Train mini sequence !.....................')
+                    iter += 1
+                    cost, newS, newC = LSTMModel.TrainFunc(featureSequence,
+                                                           heatmapXSequence,
+                                                           heatmapYSequence,
+                                                           S, C)
+                    print ('\r Train mini sequence ! Done !')
 
-                    inputBatchFeatureGts = GetFeatures(inputBatchFeatures, outputPreds)
-                    outputPreds = outputPreds.reshape((NUM_TRUNCATE, numFeaturesPerIm, numAnchorBoxPerLoc * 1))
-                    outputBboxs = outputBboxs.reshape((NUM_TRUNCATE, numFeaturesPerIm, numAnchorBoxPerLoc * 4))
 
-                    print ('Load batch ! Done !')
+                    costs.append(cost)
 
-                    for k in range(1):
-                        inputBatchFeatureGt = GetRandomFeatures(inputBatchFeatureGts)
+                    if iter % DISPLAY_FREQUENCY == 0:
+                        # Print information of current training in progress
+                        print (INFO_DISPLAY % (epoch, iter, numpy.mean(costs), folderName, objectId))
 
-                        iter += 1
-                        cost, newS, newC, predictPostAve, predictLocAve, predictNegAve, k0, k1, k2, k3, k4 = LSTMModel.TrainFunc(inputBatchFeatureGt,
-                                                               inputBatchFeatures,
-                                                               outputPreds,
-                                                               outputBboxs,
-                                                               S,
-                                                               C,
-                                                               BoxsVariances,
-                                                               RatioPosNeg)
-                        costs.append(cost)
-                        predictPostAves.append(predictPostAve)
-                        predictLocAves.append(predictLocAve)
-                        predictNegAves.append(predictNegAve)
+                        # Plot result in progress
+                        iterVisualize.append(iter)
+                        costVisualize.append(numpy.mean(costs))
+                        data.set_xdata(numpy.append(data.get_xdata(), iterVisualize[-1]))
+                        data.set_ydata(numpy.append(data.get_ydata(), costVisualize[-1]))
+                        yLimit = math.floor(numpy.max(costVisualize) / 10) * 10 + 4
+                        plt.axis([START_ITERATION, iterVisualize[-1], 0, yLimit])
+                        plt.draw()
+                        plt.pause(0.05)
 
-                        # Check ratioPosNeg
-                        # if iter % DISPLAY_FREQUENCY == 0:
-                        #     if numpy.mean(predictPostAves) < 0.5:
-                        #         RatioPosNeg = 1. / 3
-                        #     else:
-                        #         RatioPosNeg = 3
+                        # Empty costs for next visualization
+                        costs = []
 
-                        if iter % DISPLAY_FREQUENCY == 0:
-                            print ('Epoch = %d, iteration = %d, cost = %f, predictPosAve = %f, predictLocAve = %f, predictNegAve = %f. ObjectId = %d' % (epoch, iter, numpy.mean(costs),
-                                                                                                                                     numpy.mean(predictPostAves),
-                                                                                                                                     numpy.mean(predictLocAves),
-                                                                                                                                     numpy.mean(predictNegAves), objectId))
-                            iterVisualize.append(iter)
-                            costVisualize.append(numpy.mean(costs))
-
-                            data.set_xdata(numpy.append(data.get_xdata(), iterVisualize[-1]))
-                            data.set_ydata(numpy.append(data.get_ydata(), costVisualize[-1]))
-                            yLimit = math.floor(numpy.max(costVisualize) / 10) * 10 + 4
-                            plt.axis([START_ITERATION, iterVisualize[-1], 0, yLimit])
-                            plt.draw()
-                            plt.pause(0.05)
-                            costs = []
-                            predictPostAves = []
-                            predictLocAves  = []
-                            predictNegAves  = []
-
-                        if iter % SAVE_FREQUENCY == 0:
-                            file = open(SAVE_PATH % (epoch, iter), 'wb')
-                            LSTMModel.SaveModel(file)
-                            file.close()
-                            print ('Save model !')
+                    if iter % SAVE_FREQUENCY == 0:
+                        file = open(SAVE_PATH % (epoch, iter), 'wb')
+                        LSTMModel.SaveModel(file)
+                        file.close()
+                        print ('Save model !')
 
                     S = newS;       C = newC
-
 
 def Draw(imsPath, bboxs):
     fig, ax = plt.subplots(1)
