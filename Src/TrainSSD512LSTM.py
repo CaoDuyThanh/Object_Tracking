@@ -1,7 +1,7 @@
 import numpy
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from FeaturesExtraction.SSD300FeaExtraction import *
+from FeaturesExtraction.SSD512FeaExtraction import *
 from Utils.MOTDataHelper import *
 from Models.LSTM.LSTMTrackingModel import *
 from Utils.DefaultBox import *
@@ -14,31 +14,37 @@ from Utils.BBoxHelper import *
 ########################################################################################################################
 # TRAINING HYPER PARAMETER
 NUM_EPOCH         = 10
-DISPLAY_FREQUENCY = 50
-SAVE_FREQUENCY    = 1000
+DISPLAY_FREQUENCY = 10
+SAVE_FREQUENCY    = 150
 
 # LSTM NETWORK CONFIG
-NUM_TRUNCATE      = 5
+NUM_TRUNCATE      = 10
 NUM_HIDDEN        = 512
 INPUTS_SIZE       = [256]
 OUTPUTS_SIZE      = [6, 24]
+SEQUENCE_TRAIN    = NUM_TRUNCATE * 2
+
+# BOUNDING BOX HYPER
+ALPHA = 0.6
+BETA  = 1.4
 
 # DATASET CONFIGURATION
 DATASET_PATH    = '/media/badapple/Data/PROJECTS/Machine Learning/Dataset/MOT16/'
 DATASET_SOURCE  = 'MOT'
 
 # SAVE MODEL PATH
-SAVE_PATH       = '../Pretrained/SSD/LSTM_SSD_Epoch=%d_Iter=%d.pkl'
+SAVE_PATH       = '../Pretrained/SSD512/LSTM_SSD_Epoch=%d_Iter=%d.pkl'
 
 # LOAD MODEL PATH
-LOAD_MODEL_PATH = '../Pretrained/SSD/LSTM_SSD_Epoch=%d_Iter=%d.pkl'
-START_EPOCH     = 6
-START_ITERATION = 52000
+LOAD_MODEL_PATH = '../Pretrained/SSD512/LSTM_SSD_Epoch=%d_Iter=%d.pkl'
+START_EPOCH     = 1
+START_ITERATION = 7050
 
 #  GLOBAL VARIABLES
 Dataset           = None
 FeatureFactory    = None
 DefaultBboxs      = None
+BoxsVariances     = None
 LSTMModel         = None
 
 
@@ -59,25 +65,29 @@ def LoadDataset():
 #                                                                                                                      #
 ########################################################################################################################
 def CreateSSDExtractFactory():
-    global FeatureFactory, DefaultBboxs
-    FeatureFactory = SSD300FeaExtraction(batchSize =NUM_TRUNCATE + 1)
-    FeatureFactory.LoadCaffeModel('../Models/SSD_300x300/VOC0712/deploy.prototxt',
-                                  '../Models/SSD_300x300/VOC0712/VGG_VOC0712_SSD_300x300_iter_120000.caffemodel')
-    FeatureFactory.LoadEncodeLayers('../Preprocessing/conv4_3_norm_encode.pkl',
-                                    '../Preprocessing/fc7_encode.pkl',
-                                    '../Preprocessing/conv6_2_encode.pkl')
-    DefaultBboxs = FeatureFactory.GetDefaultBbox(imageWidth = 300,
-                                                 sMin       = 3,
+    global FeatureFactory, DefaultBboxs, BoxsVariances
+    FeatureFactory = SSD512FeaExtraction(batchSize = NUM_TRUNCATE)
+    FeatureFactory.LoadCaffeModel('../Models/SSD_512x512/VOC0712/deploy.prototxt',
+                                  '../Models/SSD_512x512/VOC0712/VGG_coco_SSD_512x512_iter_360000.caffemodel')
+    FeatureFactory.LoadEncodeLayers('../Preprocessing/SSD512/ssd512_conv4_3_norm_encode.pkl',
+                                    '../Preprocessing/SSD512/ssd512_fc7_encode.pkl',
+                                    '../Preprocessing/SSD512/ssd512_conv6_2_encode.pkl')
+    DefaultBboxs = FeatureFactory.GetDefaultBbox(imageWidth = 512,
+                                                 sMin       = 10,
                                                  sMax       = 90,
-                                                 layerSizes = [(38, 38),
-                                                               (19, 19),
-                                                               (10, 10),
-                                                               (5, 5),
-                                                               (3, 3),
-                                                               (1, 1)],
-                                                 numBoxs    = [6, 6, 6, 6, 6, 6],
+                                                 layerSizes = [(64, 64),
+                                                               (32, 32),
+                                                               (16, 16),
+                                                               ( 8,  8),
+                                                               ( 4,  4),
+                                                               ( 2,  2),
+                                                               ( 1,  1)],
+                                                 numBoxs    = [6, 6, 6, 6, 6, 6, 6],
                                                  offset     = 0.5,
-                                                 steps      = [8, 16, 32, 64, 100, 300])
+                                                 steps      = [8, 16, 32, 64, 128, 256, 512])
+    BoxsVariances = numpy.zeros((DefaultBboxs.__len__() * DefaultBboxs[0].__len__(), 4), dtype = 'float32')
+    BoxsVariances[:, 0] = 0.1;      BoxsVariances[:, 1] = 0.1;
+    BoxsVariances[:, 2] = 0.2;      BoxsVariances[:, 3] = 0.2;
 
 
 ########################################################################################################################
@@ -118,14 +128,24 @@ def CreateOutput(defaultBboxs, groundTruth):
                         dtype = 'float32')
     for bboxIdx, dfbbox in enumerate(defaultBboxs):
         for archorboxIdx, archorBox in enumerate(dfbbox):
-            iou = IOU(archorBox, groundTruth)
-            if iou >= 0.5:
+            minInterestBox, maxInterestBox = InterestBox2(archorBox, groundTruth, ALPHA, BETA)
+            if minInterestBox >= 0.5 and maxInterestBox >= 0.1:
+            # if InterestBox1(archorBox, groundTruth, ALPHA, BETA):
                 pred[bboxIdx][archorboxIdx] = 1
                 gt[bboxIdx][archorboxIdx]   = [(groundTruth[0] - archorBox[0]) / archorBox[2],
                                                (groundTruth[1] - archorBox[1]) / archorBox[3],
                                                 math.log(groundTruth[2] / archorBox[2]),
                                                 math.log(groundTruth[3] / archorBox[3])]
     return [pred, gt]
+
+def CheckPred(defaultBboxs, groundTruth, overlapThres):
+    for bboxIdx, dfbbox in enumerate(defaultBboxs):
+        for archorboxIdx, archorBox in enumerate(dfbbox):
+            minInterestBox, maxInterestBox = InterestBox2(archorBox, groundTruth, ALPHA, BETA)
+            if minInterestBox >= 0.5 and maxInterestBox >= 0.1:
+            # if InterestBox1(archorBox, groundTruth, ALPHA, BETA):
+                return True
+    return False
 
 
 def GetFeatures(features, preds):
@@ -149,6 +169,21 @@ def GetRandomFeatures(features):
     return featuresgt
 
 
+def FilterBboxs(imsPath,
+                bboxs,
+                defaultBboxs = None,
+                overlapThres = 0.5):
+    newImsPath = []
+    newBboxs   = []
+    count      = 0
+    for (imPath, bbox) in zip(imsPath, bboxs):
+        count += 1
+        if CheckPred(defaultBboxs, bbox, overlapThres) == True:
+            newImsPath.append(imPath)
+            newBboxs.append(bbox)
+        print "\r    Filter metadata: %d / %d. Filted metadata: %d sample(s)" % (count, bboxs.__len__(), newBboxs.__len__()),
+    print "Filter completed !"
+    return newImsPath, newBboxs
 
 ########################################################################################################################
 #                                                                                                                      #
@@ -156,13 +191,11 @@ def GetRandomFeatures(features):
 #                                                                                                                      #
 ########################################################################################################################
 def TrainModel():
-    global Dataset, LSTMModel, FeatureFactory, DefaultBboxs
+    global Dataset, LSTMModel, FeatureFactory, DefaultBboxs, BoxsVariances
 
     # Create startStateS | startStateC
     startStateS = numpy.zeros((LSTMModel.Net.LayerOpts['lstm_num_hidden'],), dtype = 'float32')
     startStateC = numpy.zeros((LSTMModel.Net.LayerOpts['lstm_num_hidden'],), dtype = 'float32')
-    # startStateS = None
-    # startStateC = None
 
     # Plot training cost
     iterVisualize = []
@@ -172,49 +205,67 @@ def TrainModel():
     plt.axis([START_ITERATION, START_ITERATION + 10, 0, 10])
 
     # Load model
-    file = open(SAVE_PATH % (START_EPOCH, START_ITERATION))
-    LSTMModel.LoadModel(file)
-    file.close()
-    print ('Load model !')
+    if CheckFileExist(LOAD_MODEL_PATH % (START_EPOCH, START_ITERATION),
+                      throwError = False) == True:
+        file = open(LOAD_MODEL_PATH % (START_EPOCH, START_ITERATION))
+        LSTMModel.LoadModel(file)
+        file.close()
+        print ('Load model !')
+
+    RatioPosNeg = 2.
 
     # Train each folder in train folder
-    defaultBboxs = None
     iter = START_ITERATION
     costs = []
+    predictPostAves = []
+    predictLocAves  = []
+    predictNegAves  = []
 
     Dataset.DataOpts['data_phase'] = 'train'
     allFolderNames = Dataset.GetAllFolderNames()
-    for folderName in allFolderNames:
-        Dataset.DataOpts['data_folder_name'] = folderName
-        Dataset.DataOpts['data_folder_type'] = 'gt'
-        allObjectIds = Dataset.GetAllObjectIds()
+    for epoch in xrange(0, NUM_EPOCH):
+        if epoch < START_EPOCH:
+            continue
+        for folderIdx, folderName in enumerate(allFolderNames):
+            Dataset.DataOpts['data_folder_name'] = folderName
+            Dataset.DataOpts['data_folder_type'] = 'gt'
+            allObjectIds = Dataset.GetAllObjectIds()
 
-        for epoch in range(NUM_EPOCH):
-            if epoch < START_EPOCH:
-                continue
             for objectId in allObjectIds:
                 Dataset.DataOpts['data_object_id'] = objectId
-                imsPath, bboxs = Dataset.GetSequenceBy()
+
+                print ('Load metadata of objectId = %d' % (objectId))
+                imsPath, bboxs = Dataset.GetSequenceBy(occluderThres = 0.5)
 
                 # If number image in sequence less than NUM_TRUNCATE => we choose another sequence to train
                 if (imsPath.__len__() < NUM_TRUNCATE):
                     continue
 
-                # Else we train...................
+                # startIdx = numpy.random.randint(imsPath.__len__() - SEQUENCE_TRAIN + 1)
+                # endIdx   = startIdx + SEQUENCE_TRAIN
+                # imsPath  = imsPath[startIdx: endIdx]
+                # bboxs    = bboxs[startIdx: endIdx]
+
+                imsPath, bboxs = FilterBboxs(imsPath,
+                                             bboxs,
+                                             defaultBboxs = DefaultBboxs,
+                                             overlapThres = 0.5)
+
+                # Else train the sequence ...................
                 S = startStateS;    C = startStateC
-                NUM_BATCH = (imsPath.__len__() - 1) // NUM_TRUNCATE
+                NUM_BATCH = (imsPath.__len__()) // NUM_TRUNCATE
                 for batchId in range(NUM_BATCH):
                     # Get batch
-                    imsPathBatch = imsPath[batchId * NUM_TRUNCATE : (batchId + 1) * NUM_TRUNCATE + 1]
-                    bboxsBatch   = bboxs[batchId * NUM_TRUNCATE : (batchId + 1) * NUM_TRUNCATE + 1]
+                    imsPathBatch = imsPath[batchId * NUM_TRUNCATE : (batchId + 1) * NUM_TRUNCATE]
+                    bboxsBatch   = bboxs[batchId * NUM_TRUNCATE : (batchId + 1) * NUM_TRUNCATE]
 
                     # Extract feature and prepare bounding box before training....
                     batchFeatures          = FeatureFactory.ExtractFeature(imsPath = imsPathBatch)   # Extract batch features
                     batchPreds, batchBboxs = CompareBboxs(DefaultBboxs, bboxsBatch)
 
                     inputBatchFeatures   = batchFeatures[0 : NUM_TRUNCATE]
-                    outputPreds          = batchPreds[1 : ]
-                    outputBboxs          = batchBboxs[1 : ]
+                    outputPreds          = batchPreds[0 : NUM_TRUNCATE]
+                    outputBboxs          = batchBboxs[0 : NUM_TRUNCATE]
 
                     numFeaturesPerIm   = batchFeatures.shape[1]
                     numAnchorBoxPerLoc = DefaultBboxs.shape[1]
@@ -225,37 +276,48 @@ def TrainModel():
 
                     print ('Load batch ! Done !')
 
-                    test = True
-                    for ft in inputBatchFeatureGts:
-                        if ft.__len__() == 0:
-                            test = False
-                            break
-                    if test == False:
-                        continue
-
-                    for k in range(10):
+                    for k in range(1):
                         inputBatchFeatureGt = GetRandomFeatures(inputBatchFeatureGts)
 
                         iter += 1
-                        cost, newS, newC = LSTMModel.TrainFunc(inputBatchFeatureGt,
+                        cost, newS, newC, predictPostAve, predictLocAve, predictNegAve, k0, k1, k2, k3, k4 = LSTMModel.TrainFunc(inputBatchFeatureGt,
                                                                inputBatchFeatures,
                                                                outputPreds,
                                                                outputBboxs,
                                                                S,
-                                                               C)
+                                                               C,
+                                                               BoxsVariances,
+                                                               RatioPosNeg)
                         costs.append(cost)
+                        predictPostAves.append(predictPostAve)
+                        predictLocAves.append(predictLocAve)
+                        predictNegAves.append(predictNegAve)
+
+                        # Check ratioPosNeg
+                        # if iter % DISPLAY_FREQUENCY == 0:
+                        #     if numpy.mean(predictPostAves) < 0.5:
+                        #         RatioPosNeg = 1. / 3
+                        #     else:
+                        #         RatioPosNeg = 3
 
                         if iter % DISPLAY_FREQUENCY == 0:
-                            print ('Epoch = %d, iteration = %d, cost = %f. ObjectId = %d' % (epoch, iter, numpy.mean(costs), objectId))
+                            print ('Epoch = %d, iteration = %d, cost = %f, predictPosAve = %f, predictLocAve = %f, predictNegAve = %f. ObjectId = %d' % (epoch, iter, numpy.mean(costs),
+                                                                                                                                     numpy.mean(predictPostAves),
+                                                                                                                                     numpy.mean(predictLocAves),
+                                                                                                                                     numpy.mean(predictNegAves), objectId))
                             iterVisualize.append(iter)
                             costVisualize.append(numpy.mean(costs))
 
                             data.set_xdata(numpy.append(data.get_xdata(), iterVisualize[-1]))
                             data.set_ydata(numpy.append(data.get_ydata(), costVisualize[-1]))
-                            plt.axis([START_ITERATION, iterVisualize[-1], 0, 10])
+                            yLimit = math.floor(numpy.max(costVisualize) / 10) * 10 + 4
+                            plt.axis([START_ITERATION, iterVisualize[-1], 0, yLimit])
                             plt.draw()
                             plt.pause(0.05)
                             costs = []
+                            predictPostAves = []
+                            predictLocAves  = []
+                            predictNegAves  = []
 
                         if iter % SAVE_FREQUENCY == 0:
                             file = open(SAVE_PATH % (epoch, iter), 'wb')
@@ -265,6 +327,42 @@ def TrainModel():
 
                     S = newS;       C = newC
 
+
+def Draw(imsPath, bboxs):
+    fig, ax = plt.subplots(1)
+    ab = None
+
+    for imPath, bbox in zip(imsPath, bboxs):
+        rawIm = cv2.imread(imPath)
+
+        # raw = numpy.zeros((1920, 1920, 3), dtype = 'uint8')
+        # raw[0:1080, :, :] = rawIm
+        # rawIm = raw
+
+        if ab == None:
+            ab = ax.imshow(rawIm)
+        else:
+            ab.set_data(rawIm)
+
+        cx = bbox[0]
+        cy = bbox[1]
+        w  = bbox[2]
+        h  = bbox[3]
+
+        box = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2]
+
+        h, w, _ = rawIm.shape
+        rect = patches.Rectangle((box[0] * w, box[1] * h), (box[2] - box[0]) * w,
+                                 (box[3] - box[1]) * h, linewidth=1, edgecolor='r', facecolor='none')
+        # Add the patch to the Axes
+        ax.add_patch(rect)
+
+        plt.show()
+        plt.axis('off')
+
+        plt.pause(0.05)
+
+        rect.remove()
 
 if __name__ == '__main__':
     LoadDataset()
