@@ -8,7 +8,7 @@ import skimage.transform
 from Layers.LayerHelper import *
 
 
-class SSDFeaExtraction():
+class SSD300FeaExtraction():
     def __init__(self,
                  batchSize):
         ####################################
