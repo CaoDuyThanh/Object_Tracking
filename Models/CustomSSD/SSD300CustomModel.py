@@ -5,24 +5,24 @@ import cv2
 from Layers.LayerHelper import *
 from Layers.Net import *
 
-class SSD512CustomModel():
-    def __init__(self,
-                 batchSize):
+class SSD300CustomModel():
+    def __init__(self):
         ####################################
         #       Create model               #
         ####################################
 
         # Create tensor variables to store input / output data
         X = T.tensor4('X')
+        Y = T.ivector('Y')
 
         # Create shared variable for input
         net = ConvNeuralNet()
-        net.NetName = 'SSD512CustomNet'
-        net.NetOpts['batch_size'] = batchSize
+        net.NetName = 'SSD300CustomNet'
+        net.NetOpts['batch_size'] = 1
 
         # Input
         net.Layer['input']                 = InputLayer(net, X)
-        net.LayerOpts['reshape_new_shape'] = (net.NetOpts['batch_size'], 3, 512, 512)
+        net.LayerOpts['reshape_new_shape'] = (net.NetOpts['batch_size'], 3, 300, 300)
         net.Layer['input_4d'] = ReshapeLayer(net, net.Layer['input'].Output)
 
         net.LayerOpts['pool_boder_mode']    = 1
@@ -132,7 +132,6 @@ class SSD512CustomModel():
         net.LayerOpts['conv2D_WName'] = 'conv4_3_norm_encode_W'
         net.LayerOpts['conv2D_bName'] = 'conv4_3_norm_encode_b'
         net.Layer['conv4_3_norm_encode'] = ConvLayer(net, net.Layer['conv4_3_norm'].Output)
-        net.Layer['conv4_3_norm_encode_relu'] = ReLULayer(net.Layer['conv4_3_norm_encode'].Output)
 
         # conv4_3_norm_decode
         W = net.Layer['conv4_3_norm_encode'].W
@@ -144,29 +143,23 @@ class SSD512CustomModel():
         net.LayerOpts['conv2D_W']     = WLayer.Output
         net.LayerOpts['conv2D_WName'] = 'conv4_3_norm_decode_W'
         net.LayerOpts['conv2D_bName'] = 'conv4_3_norm_decode_b'
-        net.Layer['conv4_3_norm_decode'] = ConvLayer(net, net.Layer['conv4_3_norm_encode_relu'].Output)
+        net.Layer['conv4_3_norm_decode'] = ConvLayer(net, net.Layer['conv4_3_norm_encode'].Output)
         net.LayerOpts['conv2D_W']     = None   # Reset W for next layer
 
         # Stack 5
         net.LayerOpts['conv2D_filter_shape'] = (512, 512, 3, 3)
-        net.LayerOpts['conv2D_stride']       = (1, 1)
-        net.LayerOpts['conv2D_border_mode']  = (1, 1)
         net.LayerOpts['conv2D_WName'] = 'conv5_1_W'
         net.LayerOpts['conv2D_bName'] = 'conv5_1_b'
         net.Layer['conv5_1'] = ConvLayer(net, net.Layer['pool4'].Output)
         net.Layer['relu5_1'] = ReLULayer(net.Layer['conv5_1'].Output)
 
         net.LayerOpts['conv2D_filter_shape'] = (512, 512, 3, 3)
-        net.LayerOpts['conv2D_stride']       = (1, 1)
-        net.LayerOpts['conv2D_border_mode']  = (1, 1)
         net.LayerOpts['conv2D_WName'] = 'conv5_2_W'
         net.LayerOpts['conv2D_bName'] = 'conv5_2_b'
         net.Layer['conv5_2'] = ConvLayer(net, net.Layer['relu5_1'].Output)
         net.Layer['relu5_2'] = ReLULayer(net.Layer['conv5_2'].Output)
 
         net.LayerOpts['conv2D_filter_shape'] = (512, 512, 3, 3)
-        net.LayerOpts['conv2D_stride']       = (1, 1)
-        net.LayerOpts['conv2D_border_mode']  = (1, 1)
         net.LayerOpts['conv2D_WName'] = 'conv5_3_W'
         net.LayerOpts['conv2D_bName'] = 'conv5_3_b'
         net.Layer['conv5_3'] = ConvLayer(net, net.Layer['relu5_2'].Output)
@@ -204,8 +197,7 @@ class SSD512CustomModel():
         net.LayerOpts['conv2D_border_mode']  = (0, 0)
         net.LayerOpts['conv2D_WName'] = 'fc7_encode_W'
         net.LayerOpts['conv2D_bName'] = 'fc7_encode_b'
-        net.Layer['fc7_encode']      = ConvLayer(net, net.Layer['relu7'].Output)
-        net.Layer['fc7_encode_relu'] = ReLULayer(net.Layer['fc7_encode'].Output)
+        net.Layer['fc7_encode'] = ConvLayer(net, net.Layer['relu7'].Output)
 
         # fc7_decode
         W = net.Layer['fc7_encode'].W
@@ -217,7 +209,7 @@ class SSD512CustomModel():
         net.LayerOpts['conv2D_W']     = WLayer.Output
         net.LayerOpts['conv2D_WName'] = 'fc7_decode_W'
         net.LayerOpts['conv2D_bName'] = 'fc7_decode_b'
-        net.Layer['fc7_decode'] = ConvLayer(net, net.Layer['fc7_encode_relu'].Output)
+        net.Layer['fc7_decode'] = ConvLayer(net, net.Layer['fc7_encode'].Output)
         net.LayerOpts['conv2D_W'] = None  # Reset W for next layer
 
         # conv6_1 and conv6_2
@@ -245,7 +237,6 @@ class SSD512CustomModel():
         net.LayerOpts['conv2D_WName'] = 'conv6_2_encode_W'
         net.LayerOpts['conv2D_bName'] = 'conv6_2_encode_b'
         net.Layer['conv6_2_encode'] = ConvLayer(net, net.Layer['conv6_2_relu'].Output)
-        net.Layer['conv6_2_encode_relu'] = ReLULayer(net.Layer['conv6_2_encode'].Output)
 
         # conv6_2_decode
         W = net.Layer['conv6_2_encode'].W
@@ -257,7 +248,7 @@ class SSD512CustomModel():
         net.LayerOpts['conv2D_W']            = WLayer.Output
         net.LayerOpts['conv2D_WName']        = 'conv6_2_decode_W'
         net.LayerOpts['conv2D_bName']        = 'conv6_2_decode_b'
-        net.Layer['conv6_2_decode'] = ConvLayer(net, net.Layer['conv6_2_encode_relu'].Output)
+        net.Layer['conv6_2_decode'] = ConvLayer(net, net.Layer['conv6_2_encode'].Output)
         net.LayerOpts['conv2D_W']   = None  # Reset W for next layer
 
         # conv7_1 and conv7_2
@@ -288,8 +279,8 @@ class SSD512CustomModel():
         net.Layer['conv8_1_relu'] = ReLULayer(net.Layer['conv8_1'].Output)
 
         net.LayerOpts['conv2D_filter_shape'] = (256, 128, 3, 3)
-        net.LayerOpts['conv2D_stride']       = (2, 2)
-        net.LayerOpts['conv2D_border_mode']  = (1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = 0
         net.LayerOpts['conv2D_WName']        = 'conv8_2_W'
         net.LayerOpts['conv2D_bName']        = 'conv8_2_b'
         net.Layer['conv8_2'] = ConvLayer(net, net.Layer['conv8_1_relu'].Output)
@@ -306,30 +297,32 @@ class SSD512CustomModel():
         net.Layer['conv9_1_relu'] = ReLULayer(net.Layer['conv9_1'].Output)
 
         net.LayerOpts['conv2D_filter_shape'] = (256, 128, 3, 3)
-        net.LayerOpts['conv2D_stride']       = (2, 2)
-        net.LayerOpts['conv2D_border_mode']  = (1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = 0
         net.LayerOpts['conv2D_WName'] = 'conv9_2_W'
         net.LayerOpts['conv2D_bName'] = 'conv9_2_b'
         net.Layer['conv9_2']      = ConvLayer(net, net.Layer['conv9_1_relu'].Output)
         net.Layer['conv9_2_relu'] = ReLULayer(net.Layer['conv9_2'].Output)
 
         # Fifth sub convolution to get predicted box
-        # conv10_1 and conv10_2
-        net.LayerOpts['conv2D_filter_shape'] = (128, 256, 1, 1)
-        net.LayerOpts['conv2D_stride']       = (1, 1)
-        net.LayerOpts['conv2D_border_mode']  = 0
-        net.LayerOpts['conv2D_WName'] = 'conv10_1_W'
-        net.LayerOpts['conv2D_bName'] = 'conv10_1_b'
-        net.Layer['conv10_1'] = ConvLayer(net, net.Layer['conv9_2_relu'].Output)
-        net.Layer['conv10_1_relu'] = ReLULayer(net.Layer['conv10_1'].Output)
+        # Concat features from all filters
 
-        net.LayerOpts['conv2D_filter_shape'] = (256, 128, 4, 4)
-        net.LayerOpts['conv2D_stride']       = (1, 1)
-        net.LayerOpts['conv2D_border_mode']  = (1, 1)
-        net.LayerOpts['conv2D_WName'] = 'conv10_2_W'
-        net.LayerOpts['conv2D_bName'] = 'conv10_2_b'
-        net.Layer['conv10_2'] = ConvLayer(net, net.Layer['conv10_1_relu'].Output)
-        net.Layer['conv10_2_relu'] = ReLULayer(net.Layer['conv10_2'].Output)
+        # net.Layer['features'] = ConcatLayer(net, [net.Layer['conv4_3_norm_mbox_conf_flat'].Output,
+        #                                           net.Layer['fc7_mbox_conf_flat'].Output,
+        #                                           net.Layer['conv6_2_mbox_conf_flat'].Output,
+        #                                           net.Layer['conv7_2_mbox_conf_flat'].Output,
+        #                                           net.Layer['conv8_2_mbox_conf_flat'].Output,
+        #                                           net.Layer['conv9_2_mbox_conf_flat'].Output])
+
+
+
+        # net.LayerOpts['reshape_new_shape'] = (8732, 21)
+        # net.Layer['mbox_conf_reshape']     = ReshapeLayer(net, net.Layer['mbox_conf'].Output)
+        #
+        # net.Layer['mbox_conf_softmax'] = SoftmaxLayer(net.Layer['mbox_conf_reshape'].Output)
+        #
+        # net.LayerOpts['reshape_new_shape'] = (8732, 4)
+        # net.Layer['mbox_loc_flatten']      = ReshapeLayer(net, net.Layer['mbox_loc'].Output)
 
         self.Net = net
 
