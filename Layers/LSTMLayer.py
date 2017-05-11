@@ -78,20 +78,6 @@ class LSTMLayer(BasicLayer):
         bc  = self.Params[numInputs * 4 + numOutputs * 2 + 6]
         bo  = self.Params[numInputs * 4 + numOutputs * 2 + 7]
 
-        # Slice inputs to smaller input
-        # slicedInput = []; startId = 0
-        # for inputSize in self.InputsSize:
-        #     slicedInput.append(inputs[startId : startId + inputSize])
-        #     startId += inputSize
-
-        # Calculate input for each i, f, o
-        # inputI = 0; inputF = 0; inputO = 0; inputG = 0
-        # for idx, inputSize in enumerate(self.InputsSize):
-        #     inputI += T.dot(slicedInput[idx], Uis[idx])
-        #     inputF += T.dot(slicedInput[idx], Ufs[idx])
-        #     inputO += T.dot(slicedInput[idx], Uos[idx])
-        #     inputG += T.dot(slicedInput[idx], Ucs[idx])
-
         inputI = T.dot(inputs, Uis[0])
         inputF = T.dot(inputs, Ufs[0])
         inputO = T.dot(inputs, Uos[0])
@@ -111,3 +97,6 @@ class LSTMLayer(BasicLayer):
         for Wy, by in zip(Wys, bys):
             output.append(T.dot(self.S, Wy) + by)
         self.Output = output
+
+        self.CMean = T.mean(self.C, axis = 0)
+        self.SMean = T.mean(self.S, axis = 0)
