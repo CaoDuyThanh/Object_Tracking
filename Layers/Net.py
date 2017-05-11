@@ -7,15 +7,15 @@ class NeuralNet():
     def __init__(self):
         # Setting default options for NetOpts
         self.NetOpts = {}
-        self.NetOpts['rng_seed']         = 1231
+        self.NetOpts['rng_seed']         = 1610
         self.NetOpts['rng']              = numpy.random.RandomState(self.NetOpts['rng_seed'])
         self.NetOpts['theano_rng']       = RandomStreams(self.NetOpts['rng'].randint(2 ** 30))
-        self.NetOpts['l1_learning_rate'] = numpy.asarray(0.001, theano.config.floatX)
+        self.NetOpts['learning_rate']    = numpy.asarray(0.0005, theano.config.floatX)
         self.NetOpts['batch_size']       = 1
 
         self.LayerOpts = {}
         # Default options for softmax layers
-        self.LayerOpts['softmax_norm_dim'] = 1
+        self.LayerOpts['softmax_axis'] = 1
 
         # Default options for relu layers
         self.LayerOpts['relu_alpha'] = 0.01
@@ -25,6 +25,9 @@ class NeuralNet():
 
         # Default l2 term
         self.LayerOpts['l2_term'] = 0.0005
+
+        # Default l2 cost layer
+        self.LayerOpts['l2cost_axis'] = 1
 
         # Default dropping rate for dropout
         self.LayerOpts['drop_rate']       = 0.5
@@ -51,9 +54,15 @@ class NeuralNet():
         self.LayerOpts['normalize_filter_shape'] = 1
         self.LayerOpts['normalize_'] = 1
 
-
         # Concatenate layer
         self.LayerOpts['concatenate_axis'] = 1
+
+        self.UpdateOpts = {}
+        # Adam update
+        self.UpdateOpts['adam_beta1'] = 0.9
+        self.UpdateOpts['adam_beta2'] = 0.999
+        self.UpdateOpts['adam_delta'] = 0.000001
+
 
         # Network name for saving
         self.NetName = 'SimpleNet'
@@ -70,6 +79,8 @@ class NeuralNet():
 
         for name, layer in self.Layer.items():
             try:
+                if name not in layersCaffe:
+                    continue
                 if name == 'conv4_3_norm':
                     layer.Scale.set_value(layersCaffe[name].blobs[0].data)
                 layer.W.set_value(layersCaffe[name].blobs[0].data)
@@ -103,3 +114,17 @@ class ConvNeuralNet(NeuralNet):
 
         # Network name for saving
         self.NetName = 'ConvNet'
+
+class LSTMNet(NeuralNet):
+    def __init__(self):
+        NeuralNet.__init__(self)
+
+        # Setting default options for layer_opts
+        # Default options for lstm layers
+        self.LayerOpts['lstm_num_hidden']   = 500
+        self.LayerOpts['lstm_inputs_size']  = None
+        self.LayerOpts['lstm_num_truncate'] = 20
+        self.LayerOpts['lstm_params']       = None
+
+        # Network name for saving
+        self.NetName = 'LSTMNet'
