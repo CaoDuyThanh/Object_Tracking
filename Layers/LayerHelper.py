@@ -9,6 +9,14 @@ from ConcatLayer import *
 from PermuteLayer import *
 from FlattenLayer import *
 from NormalizeLayer import *
+from LSTMLayer import *
+
+# Cost layer
+from L2CostLayer import *
+from CrossEntropyLayer import *
+
+# Update
+from AdamGDUpdate import *
 
 # Activation
 from SigmoidLayer import *
