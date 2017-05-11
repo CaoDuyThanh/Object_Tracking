@@ -1,4 +1,5 @@
 import cv2
+from FileHelper import *
 
 def Size(im):
     """
@@ -30,12 +31,14 @@ def Size(im):
 
     if len(shape) == 3:
         numChannel = shape[0]
-        imWidth    = shape[1]
-        imHeight   = shape[2]
+        imHeight   = shape[1]
+        imWidth    = shape[2]
+
     else:
         numChannel = 1
-        imWidth    = shape[0]
-        imHeight   = shape[1]
+        imHeight   = shape[0]
+        imWidth    = shape[1]
+
 
     return [numChannel, imWidth, imHeight]
 
@@ -53,14 +56,26 @@ def Resize(im,
     -------
 
     """
-    cv2.resize(src   = im,
-               dst   = im,
-               dsize = newSize,
-               fx    = scaleFactor[0],
-               fy    = scaleFactor[1])
+    if newSize is not None:
+        newIm = cv2.resize(src   = im,
+                           dsize = newSize)
+    else:
+        newIm = cv2.resize(src   = im,
+                           dsize = (0, 0),
+                           fx    = scaleFactor[0],
+                           fy    = scaleFactor[1])
 
+    return newIm
+
+def ReadImage(imPath):
+    CheckFileExist(imPath)
+
+    return cv2.imread(imPath)
+
+def ConvertImage(im, format):
+    if format == 'gray':
+        im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
     return im
-
 
 
 def ScaleSize(oldSize, newSize):
@@ -84,11 +99,11 @@ def ScaleSize(oldSize, newSize):
         return oldSize
     else:
         if newSize[0] < 0:
-            ratio = newSize[1] / oldSize[1]
-            newSize[0] = oldSize[0] * ratio
+            ratio = newSize[1] * 1.0 / oldSize[1]
+            newSize = (int(oldSize[0] * ratio), int(oldSize[1] * ratio))
             return newSize
         else:
-            ratio = newSize[0] / oldSize[0]
-            newSize[1] = oldSize[1] * ratio
+            ratio = newSize[0] * 1.0 / oldSize[0]
+            newSize = (int(oldSize[0] * ratio), int(oldSize[1] * ratio))
             return newSize
 
