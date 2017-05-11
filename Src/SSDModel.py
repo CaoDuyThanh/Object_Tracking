@@ -5,8 +5,6 @@ import cv2
 from Layers.LayerHelper import *
 from Layers.Net import *
 
-BATCH_SIZE = 1
-
 class SSDModel():
     def __init__(self):
         ####################################
@@ -20,6 +18,7 @@ class SSDModel():
         # Create shared variable for input
         net = ConvNeuralNet()
         net.NetName = 'VGG16Net'
+        net.NetOpts['batch_size'] = 2
 
         # Input
         net.Layer['input'] = InputLayer(net, X)
@@ -433,41 +432,31 @@ class SSDModel():
                                                    net.Layer['conv8_2_mbox_loc_flat'].Output,
                                                    net.Layer['conv9_2_mbox_loc_flat'].Output])
 
-        net.LayerOpts['reshape_new_shape'] = (8732, 21)
+        net.LayerOpts['reshape_new_shape'] = (net.NetOpts['batch_size'], 8732, 21)
         net.Layer['mbox_conf_reshape']     = ReshapeLayer(net, net.Layer['mbox_conf'].Output)
 
-        net.Layer['mbox_conf_softmax'] = SoftmaxLayer(net.Layer['mbox_conf_reshape'].Output)
+        net.LayerOpts['softmax_axis']  = 2
+        net.Layer['mbox_conf_softmax'] = SoftmaxLayer(net, net.Layer['mbox_conf_reshape'].Output)
 
-        net.LayerOpts['reshape_new_shape'] = (8732, 4)
+        net.LayerOpts['reshape_new_shape'] = (net.NetOpts['batch_size'], 8732, 4)
         net.Layer['mbox_loc_flatten']      = ReshapeLayer(net, net.Layer['mbox_loc'].Output)
 
         self.Net = net
 
         # Predict function
-        label = T.argmax(net.Layer['mbox_conf_softmax'].Output, axis = 1)
+        label = T.argmax(net.Layer['mbox_conf_softmax'].Output, axis = 2, keepdims = True)
         self.PredFunc = theano.function(
                             inputs  = [X],
                             outputs = [label,
                                        net.Layer['mbox_loc_flatten'].Output])
 
-        self.Layers     = []
-        self.LayersName = []
-        for name, layer in sorted(net.Layer.items()):
-            self.LayersName.append(name)
-            self.Layers.append(layer.Output)
-
         self.TestFunc = theano.function(
-                            inputs = [X],
-                            outputs = self.Layers
-        )
-
-        # self.ProbFunc = theano.function(
-        #                     inputs  = [X],
-        #                     outputs = net.Layer['prob'].Output)
+                            inputs  = [X],
+                            outputs = [net.Layer['mbox_conf_softmax'].Output])
 
     def LoadCaffeModel(self,
-                  caffePrototxtPath,
-                  caffeModelPath):
+                      caffePrototxtPath,
+                      caffeModelPath):
         self.Net.LoadCaffeModel(caffePrototxtPath, caffeModelPath)
 
     def TestNetwork(self,
