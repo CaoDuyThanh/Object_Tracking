@@ -64,10 +64,11 @@ def InterestBox(box1, box2, alpha, beta):
     ratioBox2 = w2 / h2
     temp1     = alpha / beta
     temp2     = beta / alpha
-    if temp1 * ratioBox1 <= ratioBox2 and ratioBox2 <= temp2 * ratioBox1:
-        return min(ratio1, ratio2), max(ratio1, ratio2)
-    else:
-        return 0, 0
+    # if temp1 * ratioBox1 <= ratioBox2 and ratioBox2 <= temp2 * ratioBox1:
+    #     return min(ratio1, ratio2), max(ratio1, ratio2)
+    # else:
+    #     return 0, 0
+    return ratio1, ratio2
 
 
 def Distance(cx1, cy1, cx2, cy2):
