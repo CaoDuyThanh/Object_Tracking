@@ -1,3 +1,4 @@
+import numpy
 import os
 from DataHelper import DatasetHelper
 from FileHelper import *
@@ -7,6 +8,8 @@ class MOTDataHelper(DatasetHelper):
     def __init__(self,
                  datasetPath = None
                  ):
+        DatasetHelper.__init__(self)
+
         # Check parameters
         CheckNotNone(datasetPath, 'datasetPath'); CheckPathExist(datasetPath)
 
@@ -25,13 +28,27 @@ class MOTDataHelper(DatasetHelper):
 
     # ------------------------  CHECK BBOX IN RANGE OF IMAGE  ---------------------------------------------
     def checkBBox(self, topLeftX, topLeftY, width, height, realWidth, realHeight):
-        topLeftX = max(0, topLeftX)
-        topLeftY = max(0, topLeftY)
-        width    = min(realWidth, topLeftX + width) - topLeftX
-        height   = min(realHeight, topLeftY + height) - topLeftY
+        # realHeight = realWidth
 
-        return [topLeftX, topLeftY, width, height]
+        bottomRightX = topLeftX + width
+        bottomRightY = topLeftY + height
 
+        topLeftX     = max(0, topLeftX)
+        topLeftY     = max(0, topLeftY)
+        bottomRightX = min(bottomRightX, realWidth)
+        bottomRightY = min(bottomRightY, realHeight)
+
+        cx = (topLeftX + bottomRightX) * 1. / 2
+        cy = (topLeftY + bottomRightY) * 1. / 2
+        width    = bottomRightX - topLeftX
+        height   = bottomRightY - topLeftY
+
+        cx     = cx * 1. / realWidth
+        cy     = cy * 1. / realHeight
+        width  = width * 1. / realWidth
+        height = height * 1. / realHeight
+
+        return [cx, cy, width, height]
 
     # ------------------------  LOAD TRAIN | VALID | TEST FILES--------------------------------------------
     def getDataFromOneFolder(self, path):
@@ -63,7 +80,7 @@ class MOTDataHelper(DatasetHelper):
             for det in allDets:
                 data = det.split(',')
 
-                frameId  = float(data[0])  # Which frame object appears
+                frameId  = int(data[0])  # Which frame object appears
                 objectId = float(data[1])  # Number identifies that object as belonging to a tragectory by unique ID
                 topLeftX = float(data[2])  # Topleft corner of bounding box (x)
                 topLeftY = float(data[3])  # Topleft corner of bounding box (y)
@@ -84,11 +101,12 @@ class MOTDataHelper(DatasetHelper):
                                             # Occluder on the ground   10
                                             # Occluder full            11
                                             # Reflection               12
+                imPath   = os.path.join(img1Folder, '%06d.jpg' % (frameId))
 
                 if frameId not in Frames:
-                    Frames[frameId] = dict()
-                topLeftX, topLeftY, width, height = self.checkBBox(topLeftX, topLeftY, width, height, imageInfo['imagewidth'], imageInfo['imageheight'])
-                Frames[frameId][objectId] = [topLeftX, topLeftY, width, height, isIgnore, type]
+                    Frames[frameId] = []
+                cx, cy, width, height = self.checkBBox(topLeftX, topLeftY, width, height, imageInfo['imagewidth'], imageInfo['imageheight'])
+                Frames[frameId].append([cx, cy, width, height, isIgnore, type, imPath])
 
                 if objectId not in ObjectId:
                     ObjectId[objectId] = frameId
@@ -121,6 +139,7 @@ class MOTDataHelper(DatasetHelper):
                 height   = int(data[5])      # Height of the bounding box
                 isIgnore = int(data[6])      # Flag whether this particular instance is ignored in the evaluation
                 type     = int(data[7])      # Identify the type of object
+                occluder = float(data[8])    # Occluder of object
                                                 #     Label                ID
                                                 # Pedestrian                1
                                                 # Person on vehicle         2
@@ -134,11 +153,12 @@ class MOTDataHelper(DatasetHelper):
                                                 # Occluder on the ground   10
                                                 # Occluder full            11
                                                 # Reflection               12
+                imPath    = os.path.join(img1Folder, '%06d.jpg' % (frameId))
 
                 if frameId not in Frames:
                     Frames[frameId] = dict()
-                topLeftX, topLeftY, width, height = self.checkBBox(topLeftX, topLeftY, width, height, imageInfo['imagewidth'], imageInfo['imageheight'])
-                Frames[frameId][objectId] = [frameId, topLeftX, topLeftY, width, height, isIgnore, type]
+                cx, cy, width, height = self.checkBBox(topLeftX, topLeftY, width, height, imageInfo['imagewidth'], imageInfo['imageheight'])
+                Frames[frameId][objectId] = [frameId, cx, cy, width, height, isIgnore, type, occluder, imPath]
 
                 if objectId not in ObjectId:
                     ObjectId[objectId] = frameId
@@ -155,19 +175,15 @@ class MOTDataHelper(DatasetHelper):
         return Data
 
     def loadTrainFile(self):
-        self.TrainData = dict()
-        self.TrainFoldersName = []
+        self.TrainData        = dict()
         for trainFolder in self.TrainFolders:
             folderName = trainFolder.split('/')[-2]
-            self.TrainFoldersName.append(folderName)
             self.TrainData[folderName] = self.getDataFromOneFolder(trainFolder)
 
     def loadTestFile(self):
         self.TestData        = dict()
-        self.TestFoldersName = []
         for testFolder in self.TestFolders:
             folderName = testFolder.split('/')[-2]
-            self.TestFoldersName.append(folderName)
             self.TestData[folderName] = self.getDataFromOneFolder(testFolder)
 
     # -----------------------------------------------------------------------------------------------------
@@ -187,21 +203,70 @@ class MOTDataHelper(DatasetHelper):
 
         return framesPath
 
-    def GetSequenceBy(self, folderName, objectId):
-        data = self.TrainData[folderName]
-        Frames     = data['gt']['frames']
-        ObjectId   = data['gt']['objectid']
-        frameStart = ObjectId[objectId]
-        sequence = []
-        while frameStart < Frames.__len__():
-            currentFrame = Frames[frameStart]
-            if objectId in currentFrame:
-                sequence.append(currentFrame[objectId])
-            else:
-                break;
-            frameStart += 1
+    def GetAllObjectIds(self):
+        if self.DataOpts['data_phase'] == 'train':
+            folderName   = self.DataOpts['data_folder_name']
+            folderType   = self.DataOpts['data_folder_type']
+            data         = self.TrainData[folderName][folderType]
+            allObjectIds = [objectId for objectId in data['objectid']]
+            return allObjectIds
 
-        return sequence
+        if self.DataOpts['data_phase'] == 'test':
+            assert 'Do not support get AllObjectIds from test'
+
+    def GetRandomBbox(self):
+        if self.DataOpts['data_phase'] == 'train':
+            assert 'Do not support get random object from train'
+
+        if self.DataOpts['data_phase'] == 'test':
+            folderName   = self.DataOpts['data_folder_name']
+            folderType   = self.DataOpts['data_folder_type']
+            data         = self.TestData[folderName][folderType]
+            firstFrames  = data['frames'][1]
+            ranObject    = firstFrames[1]
+            return data['framespath'], ranObject
+
+
+    def GetAllFolderNames(self):
+        if self.DataOpts['data_phase'] == 'train':
+            allFolderNames = [folderName for folderName in self.TrainData]
+            return allFolderNames
+
+        if self.DataOpts['data_phase'] == 'test':
+            allFolderNames = [folderName for folderName in self.TestData]
+            return allFolderNames
+
+    def GetSequenceBy(self,
+                      occluderThres = 0.5):
+        dataPhase  = self.DataOpts['data_phase']
+        folderName = self.DataOpts['data_folder_name']
+        folderType = self.DataOpts['data_folder_type']
+        objectId   = self.DataOpts['data_object_id']
+
+        if folderType == 'det':
+            assert 'Get sequence data must in gt folder'
+
+        if dataPhase == 'train':
+            data       = self.TrainData[folderName]
+            ObjectId   = data[folderType]['objectid']
+            frameStart = ObjectId[objectId]
+            Frames     = data[folderType]['frames']
+            imsPath    = []
+            bbox       = []
+            while frameStart < Frames.__len__():
+                currentFrame = Frames[frameStart]
+                if objectId in currentFrame:
+                    if currentFrame[objectId][7] >= occluderThres:
+                        imsPath.append(currentFrame[objectId][-1])
+                        bbox.append(currentFrame[objectId][1:5])
+                else:
+                    break;
+                frameStart += 1
+
+            return imsPath, bbox
+
+        if self.DataOpts['data_phase'] == 'test':
+            assert 'Do not support get Sequence from test'
 
 
     def NextTrainBatch(self): raise NotImplementedError
