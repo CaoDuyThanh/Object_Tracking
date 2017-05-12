@@ -110,12 +110,18 @@ def CreateLSTMModel():
 def CreateHeatmapSequence(defaultBboxs, groundTruths):
     heatmapSequence = []
     for idx, groundTruth in enumerate(groundTruths):
-        heatmap = CreateHeatmap(defaultBboxs, groundTruth)
+        heatmap = CreateHeatmapF(defaultBboxs, groundTruth)
         heatmapSequence.append(heatmap)
 
     # Convert to numpy array
     heatmapSequence = numpy.asarray(heatmapSequence, dtype='float32')
     return heatmapSequence
+
+def Compare(ass,bss):
+    for (a,b) in zip(ass,bss):
+        if a != b:
+            return False
+    return True
 
 def CreateHeatmap(defaultBboxs, groundTruth):
     heatmap = numpy.zeros((defaultBboxs.shape[0], 1), dtype = 'float32')
@@ -128,6 +134,50 @@ def CreateHeatmap(defaultBboxs, groundTruth):
                 break
         if check == True:
             heatmap[bboxIdx] = 1
+    return heatmap
+
+def CreateHeatmapF(defaultBboxs, groundTruth):
+    numPos        = defaultBboxs.shape[0]
+    numBboxPerPos = defaultBboxs.shape[1]
+    sizePerBbox   = defaultBboxs.shape[2]
+
+    defaultBboxs = defaultBboxs.reshape((numPos * numBboxPerPos, sizePerBbox))
+    zeros        = numpy.zeros((numPos * numBboxPerPos))
+    interX       = numpy.maximum(zeros,
+                                 numpy.minimum(
+                                     defaultBboxs[:, 0] + defaultBboxs[:, 2] / 2,
+                                     groundTruth [0] + groundTruth [2] / 2
+                                 ) -
+                                 numpy.maximum(
+                                     defaultBboxs[:, 0] - defaultBboxs[:, 2] / 2,
+                                     groundTruth [0] - groundTruth [2] / 2
+                                 ))
+    interY       = numpy.maximum(zeros,
+                                 numpy.minimum(
+                                     defaultBboxs[:, 1] + defaultBboxs[:, 3] / 2,
+                                     groundTruth [1] + groundTruth [3] / 2
+                                 ) -
+                                 numpy.maximum(
+                                     defaultBboxs[:, 1] - defaultBboxs[:, 3] / 2,
+                                     groundTruth [1] - groundTruth [3] / 2
+                                 ))
+    iterArea = interX * interY
+
+    area1 = defaultBboxs[:, 2] * defaultBboxs[:, 3]
+    area2 = groundTruth [2] * groundTruth [3]
+
+    ratio1 = iterArea / area1
+    ratio2 = iterArea / area2
+
+    heatmap = numpy.zeros((numPos * numBboxPerPos,), dtype = 'float32')
+    index = numpy.where(ratio1 > 0.25)
+    heatmap[index] = 1
+    heatmap = heatmap.reshape((numPos, numBboxPerPos))
+    heatmap = heatmap.sum(axis = 1)
+    index = numpy.where(heatmap > 0)
+    heatmap = numpy.zeros((numPos,), dtype='float32')
+    heatmap[index] = 1
+    heatmap = heatmap.reshape((numPos, 1))
     return heatmap
 
 ########################################################################################################################
@@ -235,6 +285,45 @@ def TrainModel():
                         print ('Save model !')
 
                     S = newS;       C = newC
+
+def DrawHeatmap(imsPath, heatmaps):
+    fig, ax = plt.subplots(1)
+    ab = None
+
+    for imPath, heatmaps in zip(imsPath, heatmaps):
+        # rawIm = cv2.imread(imPath)
+
+        a = heatmaps[64 * 64 + 32 * 32:64 * 64 + 32 * 32 + 16 * 16]
+        a = numpy.asarray(a.reshape((16, 16)) * 255, dtype='uint8')
+
+        if ab == None:
+            ab = ax.imshow(a)
+        else:
+            ab.set_data(a)
+
+
+        # img = Image.fromarray(a, 'GRAY')
+
+
+        # cx = bbox[0]
+        # cy = bbox[1]
+        # w = bbox[2]
+        # h = bbox[3]
+        #
+        # box = [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2]
+        #
+        # h, w, _ = rawIm.shape
+        # rect = patches.Rectangle((box[0] * w, box[1] * h), (box[2] - box[0]) * w,
+        #                          (box[3] - box[1]) * h, linewidth=1, edgecolor='r', facecolor='none')
+        # # Add the patch to the Axes
+        # ax.add_patch(rect)
+
+        plt.show()
+        plt.axis('off')
+
+        plt.pause(0.05)
+
+        # rect.remove()
 
 def Draw(imsPath, bboxs):
     fig, ax = plt.subplots(1)
