@@ -8,8 +8,7 @@ import skimage.transform
 from Layers.LayerHelper import *
 
 class SSD512FeaExtraction():
-    def __init__(self,
-                 batchSize):
+    def __init__(self):
         ####################################
         #       Create model               #
         ####################################
@@ -19,12 +18,11 @@ class SSD512FeaExtraction():
         # Create shared variable for input
         net = ConvNeuralNet()
         net.NetName = 'SSD512CustomNet'
-        net.NetOpts['batch_size'] = batchSize
 
         # Input
-        net.Layer['input'] = InputLayer(net, X)
-        net.LayerOpts['reshape_new_shape'] = (net.NetOpts['batch_size'], 3, 512, 512)
-        net.Layer['input_4d'] = ReshapeLayer(net, net.Layer['input'].Output)
+        net.Layer['input_4d'] = InputLayer(net, X)
+        # net.LayerOpts['reshape_new_shape'] = (net.NetOpts['batch_size'], 3, 512, 512)
+        # net.Layer['input_4d'] = ReshapeLayer(net, net.Layer['input'].Output)
 
         net.LayerOpts['pool_boder_mode']    = 1
         net.LayerOpts['conv2D_border_mode'] = 1
@@ -344,7 +342,7 @@ class SSD512FeaExtraction():
                                                   net.Layer['conv9_2_relu_flat'].Output,
                                                   net.Layer['conv10_2_relu_flat'].Output])
 
-        net.LayerOpts['reshape_new_shape'] = (net.NetOpts['batch_size'], 5461, 256)
+        net.LayerOpts['reshape_new_shape'] = (net.Layer['input_4d'].Output.shape[0], 5461, 256)
         net.Layer['features_reshape']      = ReshapeLayer(net, net.Layer['features'].Output)
 
         self.Net = net
@@ -434,15 +432,19 @@ class SSD512FeaExtraction():
         return defaultBboxs
 
     def ExtractFeature(self,
-                       imsPath):
+                       imsPath,
+                       batchSize):
         ims = []
+        numHasData = 0
         for imPath in imsPath:
-            extension = imPath.split('.')[-1]
-            im = plt.imread(imPath, extension)
-            im = skimage.transform.resize(im, (512, 512), preserve_range=True)
-            im = im[:, :, [2, 1, 0]]
-            im = numpy.transpose(im, (2, 0, 1))
-            ims.append(im)
+            if imPath != '':
+                extension = imPath.split('.')[-1]
+                im = plt.imread(imPath, extension)
+                im = skimage.transform.resize(im, (512, 512), preserve_range=True)
+                im = im[:, :, [2, 1, 0]]
+                im = numpy.transpose(im, (2, 0, 1))
+                ims.append(im)
+                numHasData += 1
         ims = numpy.asarray(ims, dtype = 'float32')
 
         VGG_MEAN = numpy.asarray([103.939, 116.779, 123.68], dtype = 'float32')
@@ -450,8 +452,14 @@ class SSD512FeaExtraction():
 
         ims = ims - VGG_MEAN
 
-        SSDfeatures = self.FeatureFunc(ims)
-        return SSDfeatures[0]
+        if numHasData != 0:
+            SSDfeatures = self.FeatureFunc(ims)
+            feature     = SSDfeatures[0]
+        else:
+            numHasData = batchSize
+            feature = numpy.zeros((batchSize, 5461, 256), dtype = 'float32')
+        feature     = numpy.pad(feature, ((0, batchSize - numHasData), (0, 0), (0, 0)), mode = 'constant', constant_values = 0)
+        return feature
 
     def LoadCaffeModel(self,
                        caffePrototxtPath,
