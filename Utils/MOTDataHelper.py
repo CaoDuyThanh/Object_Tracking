@@ -216,14 +216,20 @@ class MOTDataHelper(DatasetHelper):
 
     def GetRandomBbox(self):
         if self.DataOpts['data_phase'] == 'train':
-            assert 'Do not support get random object from train'
+            folderName = self.DataOpts['data_folder_name']
+            folderType = self.DataOpts['data_folder_type']
+            data = self.TrainData[folderName][folderType]
+            firstFrames = data['frames'][1]
+            ranObject = firstFrames[2]
+            return data['framespath'], ranObject[1:5]
+            # assert 'Do not support get random object from train'
 
         if self.DataOpts['data_phase'] == 'test':
             folderName   = self.DataOpts['data_folder_name']
             folderType   = self.DataOpts['data_folder_type']
             data         = self.TestData[folderName][folderType]
             firstFrames  = data['frames'][1]
-            ranObject    = firstFrames[1]
+            ranObject    = firstFrames[2]
             return data['framespath'], ranObject
 
 
