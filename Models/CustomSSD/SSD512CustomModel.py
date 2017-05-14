@@ -147,6 +147,28 @@ class SSD512CustomModel():
         net.Layer['conv4_3_norm_decode'] = ConvLayer(net, net.Layer['conv4_3_norm_encode_relu'].Output)
         net.LayerOpts['conv2D_W']     = None   # Reset W for next layer
 
+        # conv4_3_norm_encode_d1
+        net.LayerOpts['conv2D_filter_shape'] = (1, 256, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_WName'] = 'conv4_3_norm_encode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv4_3_norm_encode_b_d1'
+        net.Layer['conv4_3_norm_encode_d1']      = ConvLayer(net, net.Layer['conv4_3_norm_encode_relu'].Output)
+        net.Layer['conv4_3_norm_encode_relu_d1'] = ReLULayer(net.Layer['conv4_3_norm_encode_d1'].Output)
+
+        # conv4_3_norm_decode_d1
+        W = net.Layer['conv4_3_norm_encode_d1'].W
+        net.LayerOpts['permute_dimension'] = (1, 0, 2, 3)
+        WLayer = PermuteLayer(net, W)
+        net.LayerOpts['conv2D_filter_shape'] = (256, 1, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_W']     = WLayer.Output
+        net.LayerOpts['conv2D_WName'] = 'conv4_3_norm_decode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv4_3_norm_decode_b_d1'
+        net.Layer['conv4_3_norm_decode_d1'] = ConvLayer(net, net.Layer['conv4_3_norm_encode_relu_d1'].Output)
+        net.LayerOpts['conv2D_W'] = None  # Reset W for next layer
+
         # Stack 5
         net.LayerOpts['conv2D_filter_shape'] = (512, 512, 3, 3)
         net.LayerOpts['conv2D_stride']       = (1, 1)
@@ -220,6 +242,28 @@ class SSD512CustomModel():
         net.Layer['fc7_decode'] = ConvLayer(net, net.Layer['fc7_encode_relu'].Output)
         net.LayerOpts['conv2D_W'] = None  # Reset W for next layer
 
+        # fc7_encode_d1
+        net.LayerOpts['conv2D_filter_shape'] = (1, 256, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_WName'] = 'fc7_encode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'fc7_encode_b_d1'
+        net.Layer['fc7_encode_d1']      = ConvLayer(net, net.Layer['fc7_encode_relu'].Output)
+        net.Layer['fc7_encode_relu_d1'] = ReLULayer(net.Layer['fc7_encode_d1'].Output)
+
+        # fc7_decode_d1
+        W = net.Layer['fc7_encode_d1'].W
+        net.LayerOpts['permute_dimension'] = (1, 0, 2, 3)
+        WLayer = PermuteLayer(net, W)
+        net.LayerOpts['conv2D_filter_shape'] = (256, 1, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_W'] = WLayer.Output
+        net.LayerOpts['conv2D_WName'] = 'fc7_decode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'fc7_decode_b_d1'
+        net.Layer['fc7_decode_d1'] = ConvLayer(net, net.Layer['fc7_encode_relu_d1'].Output)
+        net.LayerOpts['conv2D_W']  = None  # Reset W for next layer
+
         # conv6_1 and conv6_2
         net.LayerOpts['conv2D_filter_shape'] = (256, 1024, 1, 1)
         net.LayerOpts['conv2D_stride']       = (1, 1)
@@ -260,6 +304,28 @@ class SSD512CustomModel():
         net.Layer['conv6_2_decode'] = ConvLayer(net, net.Layer['conv6_2_encode_relu'].Output)
         net.LayerOpts['conv2D_W']   = None  # Reset W for next layer
 
+        # conv6_2_encode_d1
+        net.LayerOpts['conv2D_filter_shape'] = (1, 256, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_WName'] = 'conv6_2_encode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv6_2_encode_b_d1'
+        net.Layer['conv6_2_encode_d1']      = ConvLayer(net, net.Layer['conv6_2_encode_relu'].Output)
+        net.Layer['conv6_2_encode_relu_d1'] = ReLULayer(net.Layer['conv6_2_encode_d1'].Output)
+
+        # conv6_2_decode_d1
+        W = net.Layer['conv6_2_encode_d1'].W
+        net.LayerOpts['permute_dimension'] = (1, 0, 2, 3)
+        WLayer = PermuteLayer(net, W)
+        net.LayerOpts['conv2D_filter_shape'] = (256, 1, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_W'] = WLayer.Output
+        net.LayerOpts['conv2D_WName'] = 'conv6_2_decode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv6_2_decode_b_d1'
+        net.Layer['conv6_2_decode_d1'] = ConvLayer(net, net.Layer['conv6_2_encode_relu_d1'].Output)
+        net.LayerOpts['conv2D_W'] = None  # Reset W for next layer
+
         # conv7_1 and conv7_2
         net.LayerOpts['conv2D_filter_shape'] = (128, 512, 1, 1)
         net.LayerOpts['conv2D_stride']       = (1, 1)
@@ -276,6 +342,28 @@ class SSD512CustomModel():
         net.LayerOpts['conv2D_bName']        = 'conv7_2_b'
         net.Layer['conv7_2']      = ConvLayer(net, net.Layer['conv7_1_relu'].Output)
         net.Layer['conv7_2_relu'] = ReLULayer(net.Layer['conv7_2'].Output)
+
+        # conv7_2_encode_d1
+        net.LayerOpts['conv2D_filter_shape'] = (1, 256, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_WName'] = 'conv7_2_encode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv7_2_encode_b_d1'
+        net.Layer['conv7_2_encode_d1']      = ConvLayer(net, net.Layer['conv7_2_relu'].Output)
+        net.Layer['conv7_2_encode_relu_d1'] = ReLULayer(net.Layer['conv7_2_encode_d1'].Output)
+
+        # conv7_2_decode_d1
+        W = net.Layer['conv7_2_encode_d1'].W
+        net.LayerOpts['permute_dimension'] = (1, 0, 2, 3)
+        WLayer = PermuteLayer(net, W)
+        net.LayerOpts['conv2D_filter_shape'] = (256, 1, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_W'] = WLayer.Output
+        net.LayerOpts['conv2D_WName'] = 'conv7_2_decode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv7_2_decode_b_d1'
+        net.Layer['conv7_2_decode_d1'] = ConvLayer(net, net.Layer['conv7_2_encode_relu_d1'].Output)
+        net.LayerOpts['conv2D_W'] = None  # Reset W for next layer
 
         # Third sub convolution to get predicted box
         # conv8_1 and conv8_2
@@ -295,6 +383,28 @@ class SSD512CustomModel():
         net.Layer['conv8_2'] = ConvLayer(net, net.Layer['conv8_1_relu'].Output)
         net.Layer['conv8_2_relu'] = ReLULayer(net.Layer['conv8_2'].Output)
 
+        # conv8_2_encode_d1
+        net.LayerOpts['conv2D_filter_shape'] = (1, 256, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_WName'] = 'conv8_2_encode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv8_2_encode_b_d1'
+        net.Layer['conv8_2_encode_d1']      = ConvLayer(net, net.Layer['conv8_2_relu'].Output)
+        net.Layer['conv8_2_encode_relu_d1'] = ReLULayer(net.Layer['conv8_2_encode_d1'].Output)
+
+        # conv8_2_decode_d1
+        W = net.Layer['conv8_2_encode_d1'].W
+        net.LayerOpts['permute_dimension'] = (1, 0, 2, 3)
+        WLayer = PermuteLayer(net, W)
+        net.LayerOpts['conv2D_filter_shape'] = (256, 1, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_W'] = WLayer.Output
+        net.LayerOpts['conv2D_WName'] = 'conv8_2_decode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv8_2_decode_b_d1'
+        net.Layer['conv8_2_decode_d1'] = ConvLayer(net, net.Layer['conv8_2_encode_relu_d1'].Output)
+        net.LayerOpts['conv2D_W'] = None  # Reset W for next layer
+
         # Fourth sub convolution to get predicted box
         # conv9_1 and conv9_2
         net.LayerOpts['conv2D_filter_shape'] = (128, 256, 1, 1)
@@ -312,6 +422,28 @@ class SSD512CustomModel():
         net.LayerOpts['conv2D_bName'] = 'conv9_2_b'
         net.Layer['conv9_2']      = ConvLayer(net, net.Layer['conv9_1_relu'].Output)
         net.Layer['conv9_2_relu'] = ReLULayer(net.Layer['conv9_2'].Output)
+
+        # conv9_2_encode_d1
+        net.LayerOpts['conv2D_filter_shape'] = (1, 256, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_WName'] = 'conv9_2_encode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv9_2_encode_b_d1'
+        net.Layer['conv9_2_encode_d1'] = ConvLayer(net, net.Layer['conv9_2_relu'].Output)
+        net.Layer['conv9_2_encode_relu_d1'] = ReLULayer(net.Layer['conv9_2_encode_d1'].Output)
+
+        # conv9_2_decode_d1
+        W = net.Layer['conv9_2_encode_d1'].W
+        net.LayerOpts['permute_dimension'] = (1, 0, 2, 3)
+        WLayer = PermuteLayer(net, W)
+        net.LayerOpts['conv2D_filter_shape'] = (256, 1, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_W'] = WLayer.Output
+        net.LayerOpts['conv2D_WName'] = 'conv9_2_decode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv9_2_decode_b_d1'
+        net.Layer['conv9_2_decode_d1'] = ConvLayer(net, net.Layer['conv9_2_encode_relu_d1'].Output)
+        net.LayerOpts['conv2D_W'] = None  # Reset W for next layer
 
         # Fifth sub convolution to get predicted box
         # conv10_1 and conv10_2
@@ -331,6 +463,28 @@ class SSD512CustomModel():
         net.Layer['conv10_2'] = ConvLayer(net, net.Layer['conv10_1_relu'].Output)
         net.Layer['conv10_2_relu'] = ReLULayer(net.Layer['conv10_2'].Output)
 
+        # conv10_2_encode_d1
+        net.LayerOpts['conv2D_filter_shape'] = (1, 256, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_WName'] = 'conv10_2_encode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv10_2_encode_b_d1'
+        net.Layer['conv10_2_encode_d1']      = ConvLayer(net, net.Layer['conv10_2_relu'].Output)
+        net.Layer['conv10_2_encode_relu_d1'] = ReLULayer(net.Layer['conv10_2_encode_d1'].Output)
+
+        # conv10_2_decode_d1
+        W = net.Layer['conv10_2_encode_d1'].W
+        net.LayerOpts['permute_dimension'] = (1, 0, 2, 3)
+        WLayer = PermuteLayer(net, W)
+        net.LayerOpts['conv2D_filter_shape'] = (256, 1, 1, 1)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_W'] = WLayer.Output
+        net.LayerOpts['conv2D_WName'] = 'conv10_2_decode_W_d1'
+        net.LayerOpts['conv2D_bName'] = 'conv10_2_decode_b_d1'
+        net.Layer['conv10_2_decode_d1'] = ConvLayer(net, net.Layer['conv10_2_encode_relu_d1'].Output)
+        net.LayerOpts['conv2D_W'] = None  # Reset W for next layer
+
         self.Net = net
 
         # Train conv4_3_encode layer
@@ -349,6 +503,22 @@ class SSD512CustomModel():
                                     updates = updates,
                                     outputs = conv4_3_encode_costl2)
 
+        # Train conv4_3_encode_d1 layer
+        net.LayerOpts['flatten_ndim']              = 2
+        net.Layer['conv4_3_norm_encode_relu_flat'] = FlattenLayer(net, net.Layer['conv4_3_norm_encode_relu'].Output)
+        net.LayerOpts['flatten_ndim']            = 2
+        net.Layer['conv4_3_norm_decode_d1_flat'] = FlattenLayer(net, net.Layer['conv4_3_norm_decode_d1'].Output)
+        net.LayerOpts['l2cost_axis'] = 1
+        conv4_3_encode_d1_costl2 = L2CostLayer(net, net.Layer['conv4_3_norm_encode_relu_flat'].Output,
+                                               net.Layer['conv4_3_norm_decode_d1_flat'].Output).Output
+        params = net.Layer['conv4_3_norm_encode_d1'].Params
+        grads  = T.grad(conv4_3_encode_d1_costl2, params)
+        updates = AdamGDUpdate(net, params = params, grads = grads).Updates
+        self.Conv4_3EncodeD1Func = theano.function(
+                                    inputs  = [X],
+                                    updates = updates,
+                                    outputs = conv4_3_encode_d1_costl2)
+
         # Train fc7_encode layer
         net.LayerOpts['flatten_ndim']  = 2
         net.Layer['relu7_flat']        = FlattenLayer(net, net.Layer['relu7'].Output)
@@ -365,6 +535,22 @@ class SSD512CustomModel():
                                     updates = updates,
                                     outputs = fc7_encode_costl2)
 
+        # Train fc7_encode_d1 layer
+        net.LayerOpts['flatten_ndim']       = 2
+        net.Layer['relu7_encode_relu_flat'] = FlattenLayer(net, net.Layer['fc7_encode_relu'].Output)
+        net.LayerOpts['flatten_ndim']   = 2
+        net.Layer['fc7_decode_d1_flat'] = FlattenLayer(net, net.Layer['fc7_decode_d1'].Output)
+        net.LayerOpts['l2cost_axis'] = 1
+        fc7_encode_d1_costl2 = L2CostLayer(net, net.Layer['relu7_encode_relu_flat'].Output,
+                                           net.Layer['fc7_decode_d1_flat'].Output).Output
+        params = net.Layer['fc7_encode_d1'].Params
+        grads  = T.grad(fc7_encode_d1_costl2, params)
+        updates = AdamGDUpdate(net, params = params, grads = grads).Updates
+        self.Fc7EncodeD1Func = theano.function(
+                                    inputs  = [X],
+                                    updates = updates,
+                                    outputs = fc7_encode_d1_costl2)
+
         # Train conv6_2_encode layer
         net.LayerOpts['flatten_ndim']  = 2
         net.Layer['conv6_2_relu_flat'] = FlattenLayer(net, net.Layer['conv6_2_relu'].Output)
@@ -380,6 +566,86 @@ class SSD512CustomModel():
                                     inputs  = [X],
                                     updates = updates,
                                     outputs = conv6_2_encode_costl2)
+
+        # Train conv6_2_encode_d1 layer
+        net.LayerOpts['flatten_ndim']         = 2
+        net.Layer['conv6_2_encode_relu_flat'] = FlattenLayer(net, net.Layer['conv6_2_encode_relu'].Output)
+        net.LayerOpts['flatten_ndim']       = 2
+        net.Layer['conv6_2_decode_d1_flat'] = FlattenLayer(net, net.Layer['conv6_2_decode_d1'].Output)
+        net.LayerOpts['l2cost_axis'] = 1
+        conv6_2_encode_d1_costl2 = L2CostLayer(net, net.Layer['conv6_2_encode_relu_flat'].Output,
+                                               net.Layer['conv6_2_decode_d1_flat'].Output).Output
+        params = net.Layer['conv6_2_encode_d1'].Params
+        grads = T.grad(conv6_2_encode_d1_costl2, params)
+        updates = AdamGDUpdate(net, params=params, grads=grads).Updates
+        self.Conv6_2EncodeD1Func = theano.function(
+                                    inputs  = [X],
+                                    updates = updates,
+                                    outputs = conv6_2_encode_d1_costl2)
+
+        # Train conv7_2_encode_d1 layer
+        net.LayerOpts['flatten_ndim']  = 2
+        net.Layer['conv7_2_relu_flat'] = FlattenLayer(net, net.Layer['conv7_2_relu'].Output)
+        net.LayerOpts['flatten_ndim']       = 2
+        net.Layer['conv7_2_decode_d1_flat'] = FlattenLayer(net, net.Layer['conv7_2_decode_d1'].Output)
+        net.LayerOpts['l2cost_axis'] = 1
+        conv7_2_encode_d1_costl2 = L2CostLayer(net, net.Layer['conv7_2_relu_flat'].Output,
+                                               net.Layer['conv7_2_decode_d1_flat'].Output).Output
+        params = net.Layer['conv7_2_encode_d1'].Params
+        grads = T.grad(conv7_2_encode_d1_costl2, params)
+        updates = AdamGDUpdate(net, params=params, grads=grads).Updates
+        self.Conv7_2EncodeD1Func = theano.function(
+                                        inputs  = [X],
+                                        updates = updates,
+                                        outputs = conv7_2_encode_d1_costl2)
+
+        # Train conv8_2_encode_d1 layer
+        net.LayerOpts['flatten_ndim'] = 2
+        net.Layer['conv8_2_relu_flat'] = FlattenLayer(net, net.Layer['conv8_2_relu'].Output)
+        net.LayerOpts['flatten_ndim'] = 2
+        net.Layer['conv8_2_decode_d1_flat'] = FlattenLayer(net, net.Layer['conv8_2_decode_d1'].Output)
+        net.LayerOpts['l2cost_axis'] = 1
+        conv8_2_encode_d1_costl2 = L2CostLayer(net, net.Layer['conv8_2_relu_flat'].Output,
+                                               net.Layer['conv8_2_decode_d1_flat'].Output).Output
+        params = net.Layer['conv8_2_encode_d1'].Params
+        grads = T.grad(conv8_2_encode_d1_costl2, params)
+        updates = AdamGDUpdate(net, params=params, grads=grads).Updates
+        self.Conv8_2EncodeD1Func = theano.function(
+                                        inputs=[X],
+                                        updates=updates,
+                                        outputs=conv8_2_encode_d1_costl2)
+
+        # Train conv9_2_encode_d1 layer
+        net.LayerOpts['flatten_ndim'] = 2
+        net.Layer['conv9_2_relu_flat'] = FlattenLayer(net, net.Layer['conv9_2_relu'].Output)
+        net.LayerOpts['flatten_ndim'] = 2
+        net.Layer['conv9_2_decode_d1_flat'] = FlattenLayer(net, net.Layer['conv9_2_decode_d1'].Output)
+        net.LayerOpts['l2cost_axis'] = 1
+        conv9_2_encode_d1_costl2 = L2CostLayer(net, net.Layer['conv9_2_relu_flat'].Output,
+                                               net.Layer['conv9_2_decode_d1_flat'].Output).Output
+        params = net.Layer['conv9_2_encode_d1'].Params
+        grads = T.grad(conv9_2_encode_d1_costl2, params)
+        updates = AdamGDUpdate(net, params=params, grads=grads).Updates
+        self.Conv9_2EncodeD1Func = theano.function(
+                                        inputs=[X],
+                                        updates=updates,
+                                        outputs=conv9_2_encode_d1_costl2)
+
+        # Train conv10_2_encode_d1 layer
+        net.LayerOpts['flatten_ndim'] = 2
+        net.Layer['conv10_2_relu_flat'] = FlattenLayer(net, net.Layer['conv10_2_relu'].Output)
+        net.LayerOpts['flatten_ndim'] = 2
+        net.Layer['conv10_2_decode_d1_flat'] = FlattenLayer(net, net.Layer['conv10_2_decode_d1'].Output)
+        net.LayerOpts['l2cost_axis'] = 1
+        conv10_2_encode_d1_costl2 = L2CostLayer(net, net.Layer['conv10_2_relu_flat'].Output,
+                                               net.Layer['conv10_2_decode_d1_flat'].Output).Output
+        params = net.Layer['conv10_2_encode_d1'].Params
+        grads = T.grad(conv10_2_encode_d1_costl2, params)
+        updates = AdamGDUpdate(net, params=params, grads=grads).Updates
+        self.Conv10_2EncodeD1Func = theano.function(
+                                        inputs=[X],
+                                        updates=updates,
+                                        outputs=conv10_2_encode_d1_costl2)
 
     def LoadCaffeModel(self,
                       caffePrototxtPath,
