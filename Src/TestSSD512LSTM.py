@@ -6,6 +6,7 @@ from Utils.MOTDataHelper import *
 from Models.LSTM.LSTMTrackingModel import *
 from Utils.DefaultBox import *
 from Utils.BBoxHelper import *
+from Utils.FileHelper import *
 
 ########################################################################################################################
 #                                                                                                                      #
@@ -21,8 +22,8 @@ SAVE_FREQUENCY    = 1000
 BATCH_SIZE        = 1
 NUM_TRUNCATE      = 1
 NUM_HIDDEN        = 512
-INPUTS_SIZE       = [257]
-OUTPUTS_SIZE      = [1]
+INPUTS_SIZE       = [5461 + 5461]
+OUTPUTS_SIZE      = [5461]
 
 # BOUNDING BOX HYPER
 ALPHA = 0.6
@@ -34,8 +35,8 @@ DATASET_SOURCE  = 'MOT'
 
 # LOAD MODEL PATH
 LOAD_MODEL_PATH = '../Pretrained/SSD512/LSTM_SSD_Epoch=%d_Iter=%d.pkl'
-START_EPOCH     = 3
-START_ITERATION = 8800
+START_EPOCH     = 0
+START_ITERATION = 5800
 
 #  GLOBAL VARIABLES
 Dataset           = None
@@ -65,9 +66,6 @@ def CreateSSDExtractFactory():
     FeatureFactory = SSD512FeaExtraction()
     FeatureFactory.LoadCaffeModel('../Models/SSD_512x512/VOC0712/deploy.prototxt',
                                   '../Models/SSD_512x512/VOC0712/VGG_coco_SSD_512x512_iter_360000.caffemodel')
-    FeatureFactory.LoadEncodeLayers('../Preprocessing/SSD512/ssd512_conv4_3_norm_encode.pkl',
-                                    '../Preprocessing/SSD512/ssd512_fc7_encode.pkl',
-                                    '../Preprocessing/SSD512/ssd512_conv6_2_encode.pkl')
     DefaultBboxs = FeatureFactory.GetDefaultBbox(imageWidth=512,
                                                  sMin=10,
                                                  sMax=90,
@@ -89,12 +87,13 @@ def CreateSSDExtractFactory():
 #                                                                                                                      #
 ########################################################################################################################
 def CreateLSTMModel():
-    global LSTMModel
-    LSTMModel = LSTMTrackingModel(batchSize   = BATCH_SIZE,
-                                  numTruncate = NUM_TRUNCATE,
-                                  numHidden   = NUM_HIDDEN,
-                                  inputsSize  = INPUTS_SIZE,
-                                  outputsSize = OUTPUTS_SIZE)
+    global LSTMModel, FeatureFactory
+    LSTMModel = LSTMTrackingModel(featureFactory = FeatureFactory,
+                                  batchSize      = BATCH_SIZE,
+                                  numTruncate    = NUM_TRUNCATE,
+                                  numHidden      = NUM_HIDDEN,
+                                  inputsSize     = INPUTS_SIZE,
+                                  outputsSize    = OUTPUTS_SIZE)
 
 ########################################################################################################################
 #                                                                                                                      #
@@ -211,29 +210,30 @@ def TestModel():
         Dataset.DataOpts['data_folder_type'] = 'gt'
         imsPath, bboxs = Dataset.GetRandomBbox()
 
-        S = startStateS
+        S = startStateS; C = startStateC
 
-        featureBatch  = numpy.zeros((BATCH_SIZE, NUM_TRUNCATE, 5461, 256), dtype='float32')
+        inputBatch    = numpy.zeros((BATCH_SIZE * NUM_TRUNCATE, 3, 512, 512), dtype='float32')
         heatmapXBatch = numpy.zeros((BATCH_SIZE, NUM_TRUNCATE, 5461, 1), dtype='float32')
         id = 1
         while id < imsPath.__len__():
             imPath = imsPath[id]
 
             # Extract feature and prepare bounding box before training....
-            featureSequence = FeatureFactory.ExtractFeature(imsPath = [imPath], batchSize = NUM_TRUNCATE)   # Extract batch features
+            inputSequence = ReadImages(imsPath = [imPath], batchSize = NUM_TRUNCATE)   # Extract batch features
             if id == 1:
                 heatmapSequence = CreateHeatmapSequence(DefaultBboxs, [bboxs])
             else:
                 heatmapSequence = heatmap.reshape(1, 5461, 1)
 
-            featureBatch[0, 0, :, :]  = featureSequence
+            inputBatch[0, :, :, :]    = inputSequence
             heatmapXBatch[0, 0, :, :] = heatmapSequence
 
-            heatmap, S, C = LSTMModel.NextState(featureBatch, heatmapXBatch, S, C)
-            # heatmapIdxP = numpy.where(heatmap > 0.50)
-            # heatmapIdxN = numpy.where(heatmap <= 0.50)
-            # heatmap[heatmapIdxP] = 1
-            # heatmap[heatmapIdxN] = 0
+            heatmap, S, C = LSTMModel.NextState(inputBatch, heatmapXBatch, S, C)
+            heatmapIdxP = numpy.where(heatmap > 0.50)
+            heatmapIdxN = numpy.where(heatmap <= 0.50)
+            heatmap[heatmapIdxP] = 1
+            heatmap[heatmapIdxN] = 0
+            print (numpy.sum(heatmap))
 
             S = numpy.asarray([S], dtype = 'float32')
             C = numpy.asarray([C], dtype = 'float32')
@@ -261,6 +261,7 @@ def TestModel():
                 ab6 = ax[1, 1].imshow(win4)
                 ab7 = ax[1, 2].imshow(win2)
                 ab8 = ax[1, 3].imshow(win1)
+                plt.pause(5.0)
             else:
                 ab1.set_data(rawIm)
                 ab2.set_data(win64)
@@ -355,6 +356,6 @@ def Draw(imsPath, bboxs):
 
 if __name__ == '__main__':
     LoadDataset()
-    CreateLSTMModel()
     CreateSSDExtractFactory()
+    CreateLSTMModel()
     TestModel()
