@@ -1,5 +1,8 @@
 import os
 import configparser
+import numpy
+import skimage.transform
+import matplotlib.pyplot as plt
 
 def CheckFileExist(filePath,
                    throwError = True):
@@ -54,6 +57,32 @@ def ReadFile(filePath):
     file.close()
 
     return allData
+
+def ReadImages(imsPath,
+               batchSize):
+    ims = []
+    numHasData = 0
+    for imPath in imsPath:
+        if imPath != '':
+            extension = imPath.split('.')[-1]
+            im = plt.imread(imPath, extension)
+            im = skimage.transform.resize(im, (512, 512), preserve_range=True)
+            im = im[:, :, [2, 1, 0]]
+            im = numpy.transpose(im, (2, 0, 1))
+            ims.append(im)
+            numHasData += 1
+    ims = numpy.asarray(ims, dtype = 'float32')
+
+    VGG_MEAN = numpy.asarray([103.939, 116.779, 123.68], dtype = 'float32')
+    VGG_MEAN = numpy.reshape(VGG_MEAN, (1, 3, 1, 1))
+
+    ims = ims - VGG_MEAN
+
+    if numHasData == 0:
+        numHasData = batchSize
+        ims        = numpy.zeros((batchSize, 3, 512, 512), dtype = 'float32')
+    ims     = numpy.pad(ims, ((0, batchSize - numHasData), (0, 0), (0, 0), (0, 0)), mode = 'constant', constant_values = 0)
+    return ims
 
 def ReadFileIni(filePath):
     # Check file exist
