@@ -220,7 +220,7 @@ class MOTDataHelper(DatasetHelper):
             folderType = self.DataOpts['data_folder_type']
             data = self.TrainData[folderName][folderType]
             firstFrames = data['frames'][1]
-            ranObject = firstFrames[2]
+            ranObject = firstFrames[1]
             return data['framespath'], ranObject[1:5]
             # assert 'Do not support get random object from train'
 
