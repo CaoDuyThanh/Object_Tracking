@@ -1,28 +1,41 @@
 import numpy
+import random
+import time
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import thread
 from FeaturesExtraction.SSD512FeaExtraction import *
 from Utils.MOTDataHelper import *
 from Models.LSTM.LSTMTrackingModel import *
 from Utils.DefaultBox import *
 from Utils.BBoxHelper import *
+from Utils.FileHelper import *
 
 ########################################################################################################################
 #                                                                                                                      #
 #    CONFIGURATIONS SESSION                                                                                            #
 #                                                                                                                      #
 ########################################################################################################################
+# SAVE DATA TRAINING
+FILE_RECORD = 'record.pkl'
+
+# TRAIN | VALID | TEST RATIO
+TRAIN_RATIO = 0.8
+VALID_RATIO = 0.05
+TEST_RATIO  = 0.15
+
 # TRAINING HYPER PARAMETER
-BATCH_SIZE        = 5
-NUM_EPOCH         = 10
-DISPLAY_FREQUENCY = 5;     INFO_DISPLAY = 'Epoch = %d, iteration = %d, cost = %f'
-SAVE_FREQUENCY    = 100
+BATCH_SIZE         = 1
+NUM_EPOCH          = 10
+DISPLAY_FREQUENCY  = 10;     INFO_DISPLAY = 'Epoch = %d, iteration = %d, cost = %f, costPos = %f, costNeg = %f'
+SAVE_FREQUENCY     = 500
+VALIDATE_FREQUENCY = 100
 
 # LSTM NETWORK CONFIG
 NUM_TRUNCATE      = 8
 NUM_HIDDEN        = 512
-INPUTS_SIZE       = [257]
-OUTPUTS_SIZE      = [1]
+INPUTS_SIZE       = [5461 + 5461]
+OUTPUTS_SIZE      = [5461]
 SEQUENCE_TRAIN    = NUM_TRUNCATE * 2
 
 # BOUNDING BOX HYPER
@@ -38,8 +51,8 @@ SAVE_PATH       = '../Pretrained/SSD512/LSTM_SSD_Epoch=%d_Iter=%d.pkl'
 
 # LOAD MODEL PATH
 LOAD_MODEL_PATH = '../Pretrained/SSD512/LSTM_SSD_Epoch=%d_Iter=%d.pkl'
-START_EPOCH     = 3
-START_ITERATION = 8800
+START_EPOCH     = 2
+START_ITERATION = 31500
 
 #  GLOBAL VARIABLES
 Dataset           = None
@@ -47,6 +60,7 @@ FeatureFactory    = None
 DefaultBboxs      = None
 BoxsVariances     = None
 LSTMModel         = None
+IsPause           = False
 
 
 ########################################################################################################################
@@ -70,9 +84,6 @@ def CreateSSDExtractFactory():
     FeatureFactory = SSD512FeaExtraction()
     FeatureFactory.LoadCaffeModel('../Models/SSD_512x512/VOC0712/deploy.prototxt',
                                   '../Models/SSD_512x512/VOC0712/VGG_coco_SSD_512x512_iter_360000.caffemodel')
-    FeatureFactory.LoadEncodeLayers('../Preprocessing/SSD512/ssd512_conv4_3_norm_encode.pkl',
-                                    '../Preprocessing/SSD512/ssd512_fc7_encode.pkl',
-                                    '../Preprocessing/SSD512/ssd512_conv6_2_encode.pkl')
     DefaultBboxs = FeatureFactory.GetDefaultBbox(imageWidth = 512,
                                                  sMin       = 10,
                                                  sMax       = 90,
@@ -86,10 +97,6 @@ def CreateSSDExtractFactory():
                                                  numBoxs    = [6, 6, 6, 6, 6, 6, 6],
                                                  offset     = 0.5,
                                                  steps      = [8, 16, 32, 64, 128, 256, 512])
-    BoxsVariances = numpy.zeros((DefaultBboxs.__len__() * DefaultBboxs[0].__len__(), 4), dtype = 'float32')
-    BoxsVariances[:, 0] = 0.1;      BoxsVariances[:, 1] = 0.1;
-    BoxsVariances[:, 2] = 0.2;      BoxsVariances[:, 3] = 0.2;
-
 
 ########################################################################################################################
 #                                                                                                                      #
@@ -97,12 +104,13 @@ def CreateSSDExtractFactory():
 #                                                                                                                      #
 ########################################################################################################################
 def CreateLSTMModel():
-    global LSTMModel
-    LSTMModel = LSTMTrackingModel(batchSize   = BATCH_SIZE,
-                                  numTruncate = NUM_TRUNCATE,
-                                  numHidden   = NUM_HIDDEN,
-                                  inputsSize  = INPUTS_SIZE,
-                                  outputsSize = OUTPUTS_SIZE)
+    global LSTMModel, FeatureFactory
+    LSTMModel = LSTMTrackingModel(featureFactory = FeatureFactory,
+                                  batchSize      = BATCH_SIZE,
+                                  numTruncate    = NUM_TRUNCATE,
+                                  numHidden      = NUM_HIDDEN,
+                                  inputsSize     = INPUTS_SIZE,
+                                  outputsSize    = OUTPUTS_SIZE)
 
 ########################################################################################################################
 #                                                                                                                      #
@@ -182,26 +190,186 @@ def CreateHeatmapF(defaultBboxs, groundTruth):
     heatmap = heatmap.reshape((numPos, 1))
     return heatmap
 
+def GetBatchMetaData(batchObjectIds):
+    global Dataset
+
+    imsPathBatch = []
+    bboxsBatch = []
+    maxSequence = 0
+    for oneObjectId in batchObjectIds:
+        folderName = oneObjectId[0]
+        objectId = oneObjectId[1]
+        Dataset.DataOpts['data_folder_name'] = folderName
+        Dataset.DataOpts['data_object_id']   = objectId
+        imsPath, bboxs = Dataset.GetSequenceBy(occluderThres=0.5)
+        imsPathBatch.append(imsPath)
+        bboxsBatch.append(bboxs)
+        maxSequence = max(maxSequence, imsPath.__len__())
+    for (imsPath, bboxs) in zip(imsPathBatch, bboxsBatch):
+        if imsPath.__len__() < maxSequence:
+            for id in range(maxSequence - imsPath.__len__()):
+                imsPath.append('')
+                bboxs.append([0, 0, 0, 0])
+
+    return imsPathBatch, bboxsBatch, maxSequence
+
+def GetBatchData(imsPathBatch,
+                 bboxsBatch,
+                 sequenceIdx):
+    # Extract features of batch
+    inputBatch = numpy.zeros((BATCH_SIZE, NUM_TRUNCATE, 3, 512, 512), dtype='float32')
+    heatmapXBatch = numpy.zeros((BATCH_SIZE, NUM_TRUNCATE, 5461, 1), dtype='float32')
+    heatmapYBatch = numpy.zeros((BATCH_SIZE, NUM_TRUNCATE, 5461, 1), dtype='float32')
+
+    for objectIdx in range(BATCH_SIZE):
+        # Get sequence
+        imsPathSequence = imsPathBatch[objectIdx][sequenceIdx * NUM_TRUNCATE: (sequenceIdx + 1) * NUM_TRUNCATE + 1]
+        bboxsSequence   = bboxsBatch  [objectIdx][sequenceIdx * NUM_TRUNCATE: (sequenceIdx + 1) * NUM_TRUNCATE + 1]
+
+        # Extract feature and prepare bounding box before training....
+        inputSequence   = ReadImages(imsPath = imsPathSequence, batchSize = NUM_TRUNCATE + 1)  # Extract sequence features
+        heatmapSequence = CreateHeatmapSequence(DefaultBboxs, bboxsSequence)
+
+        inputSequence    = inputSequence  [0 : NUM_TRUNCATE]
+        heatmapXSequence = heatmapSequence[0 : NUM_TRUNCATE]
+        heatmapYSequence = heatmapSequence[1 : NUM_TRUNCATE + 1]
+
+        inputBatch[objectIdx, :, :, :, :] = inputSequence
+        heatmapXBatch[objectIdx, :, :, :] = heatmapXSequence
+        heatmapYBatch[objectIdx, :, :, :] = heatmapYSequence
+    inputBatch = inputBatch.reshape((BATCH_SIZE * NUM_TRUNCATE, 3, 512, 512))
+
+    return inputBatch, heatmapXBatch, heatmapYBatch
+
+########################################################################################################################
+#                                                                                                                      #
+#    VALID LSTM MODEL........................                                                                          #
+#                                                                                                                      #
+########################################################################################################################
+def ValidModel(ValidData):
+    global Dataset, LSTMModel, FeatureFactory, DefaultBboxs, BoxsVariances
+    print ('---------------------------------------- VALID MODEL -----------------------------------------------------')
+
+    # Create startStateS | startStateC
+    startStateS = numpy.zeros((BATCH_SIZE, LSTMModel.Net.LayerOpts['lstm_num_hidden'],), dtype='float32')
+    startStateC = numpy.zeros((BATCH_SIZE, LSTMModel.Net.LayerOpts['lstm_num_hidden'],), dtype='float32')
+
+    S = startStateS;        C = startStateC
+
+    # Train each folder in train folder
+    iter  = 0
+    CostsValid = []
+    costs      = []
+    costsPos   = []
+    costsNeg   = []
+    epoch = 0
+    # Training start from here..........................................................................................
+    numBatchObjectIds = ValidData.__len__() // BATCH_SIZE
+    for batchObjectIdx in range(numBatchObjectIds):
+        batchObjectIds = ValidData[batchObjectIdx * BATCH_SIZE: (batchObjectIdx + 1) * BATCH_SIZE]
+
+        # Print information
+        print ('    Load metadata of batch of objectIds...................')
+        for oneObjectId in batchObjectIds:
+            folderName = oneObjectId[0]
+            objectId   = oneObjectId[1]
+            print ('        Folder name = %s        ObjectId = %d' % (folderName, objectId))
+
+        # Get information of batch of object ids
+        imsPathBatch, bboxsBatch, maxSequence = GetBatchMetaData(batchObjectIds=batchObjectIds)
+
+        # Reset status at the beginning of each sequence
+        S = startStateS;
+        C = startStateC;
+
+        # Iterate sequence of batch
+        numSequence = (maxSequence - 1) // NUM_TRUNCATE
+        for sequenceIdx in range(numSequence):
+            inputBatch, heatmapXBatch, heatmapYBatch = GetBatchData(imsPathBatch = imsPathBatch,
+                                                                    bboxsBatch   = bboxsBatch,
+                                                                    sequenceIdx  = sequenceIdx)
+            print ('        Load batch. Done !')
+
+            iter += 1
+            result = LSTMModel.ValidFunc(inputBatch,
+                                         heatmapXBatch,
+                                         heatmapYBatch,
+                                         S, C)
+            cost    = result[0]
+            newS    = result[1: 1 + BATCH_SIZE]
+            newC    = result[1 + BATCH_SIZE: 1 + 2 * BATCH_SIZE]
+            costPos = result[1 + 2 * BATCH_SIZE]
+            costNeg = result[2 + 2 * BATCH_SIZE]
+            costs.append(cost)
+            costsPos.append(costPos)
+            costsNeg.append(costNeg)
+            print ('        Valid mini sequence in a batch ! Done !')
+
+            if iter % DISPLAY_FREQUENCY == 0:
+                # Print information of current training in progress
+                print ('        ' + INFO_DISPLAY % (epoch, iter, numpy.mean(costs), numpy.mean(costsPos), numpy.mean(costsNeg)))
+
+                # Plot result in progress
+                CostsValid.append(numpy.mean(costs))
+
+                # Empty costs for next visualization
+                costs = []
+                costsPos = []
+                costsNeg = []
+
+            S = numpy.asarray(newS, dtype='float32');
+            C = numpy.asarray(newC, dtype='float32')
+
+    print ('----------------------------------------------------------------------------------------------------------')
+    return numpy.mean(CostsValid)
+
+
 ########################################################################################################################
 #                                                                                                                      #
 #    TRAIN LSTM MODEL........................                                                                          #
 #                                                                                                                      #
 ########################################################################################################################
 def TrainModel():
-    global Dataset, LSTMModel, FeatureFactory, DefaultBboxs, BoxsVariances
+    global Dataset, LSTMModel, FeatureFactory, DefaultBboxs, IsPause
 
-    # Create startStateS | startStateC
-    startStateS = numpy.zeros((BATCH_SIZE, LSTMModel.Net.LayerOpts['lstm_num_hidden'],), dtype = 'float32')
-    startStateC = numpy.zeros((BATCH_SIZE, LSTMModel.Net.LayerOpts['lstm_num_hidden'],), dtype = 'float32')
+    # Get all data and devide into TRAIN | VALID | TEST set
+    Dataset.DataOpts['data_phase'] = 'train'
+    allFolderNames = Dataset.GetAllFolderNames()
+    allData = []
+    for folderName in allFolderNames:
+        Dataset.DataOpts['data_folder_name'] = folderName
+        Dataset.DataOpts['data_folder_type'] = 'gt'
+        allObjectIds = Dataset.GetAllObjectIds()
+        for objectId in allObjectIds:
+            allData.append([folderName, objectId])
+    # Shuffle data
+    random.seed(123456)
+    random.shuffle(allData)
+
+    # Divide into TRAIN|VALID|TEST set
+    TrainData = allData[0 : int(math.floor(allData.__len__() * TRAIN_RATIO))]
+    ValidData = allData[int(math.floor(allData.__len__() * TRAIN_RATIO)) : int(math.floor(allData.__len__() * (TRAIN_RATIO + VALID_RATIO)))]
+    TestData  = allData[int(math.floor(allData.__len__() * (TRAIN_RATIO + VALID_RATIO))) :]
+
+    # Load previous data record
+    IterTrainRecord = []
+    CostTrainRecord = []
+    IterValidRecord = []
+    CostValidRecord = []
+    if CheckFileExist(FILE_RECORD, throwError = False):
+        file = open(FILE_RECORD)
+        IterTrainRecord = pickle.load(file)
+        CostTrainRecord = pickle.load(file)
+        IterValidRecord = pickle.load(file)
+        CostValidRecord = pickle.load(file)
+        file.close()
+        print ('Load previous record !')
 
     # Plot training cost
-    iterVisualize = []
-    costVisualize = []
     plt.ion()
-    data, = plt.plot(iterVisualize, costVisualize)
-    plt.axis([START_ITERATION, START_ITERATION + 10, 0, 10])
+    data, = plt.plot(IterTrainRecord, CostTrainRecord)
 
-    # Load model
+    # Load modelalidModel
     if CheckFileExist(LOAD_MODEL_PATH % (START_EPOCH, START_ITERATION),
                       throwError = False) == True:
         file = open(LOAD_MODEL_PATH % (START_EPOCH, START_ITERATION))
@@ -209,122 +377,128 @@ def TrainModel():
         file.close()
         print ('Load model !')
 
+    # Create startStateS | startStateC
+    startStateS = numpy.zeros((BATCH_SIZE, LSTMModel.Net.LayerOpts['lstm_num_hidden'],), dtype='float32')
+    startStateC = numpy.zeros((BATCH_SIZE, LSTMModel.Net.LayerOpts['lstm_num_hidden'],), dtype='float32')
     S = startStateS; C = startStateC
 
     # Train each folder in train folder
-    iter = START_ITERATION
-    costs = []
+    iter     = START_ITERATION + 1
+    objectTrain = 0
+    costs    = []
+    costsPos = []
+    costsNeg = []
+
+    # Find id of objectId to start
+    for startId in range(TrainData.__len__()):
+        if TrainData[startId][0] == 'MOT16-09' and TrainData[startId][1] == 7:
+            break
+    objectTrain += START_EPOCH * TrainData.__len__() // BATCH_SIZE
+    startId     += objectTrain
+
+    print ('objectTrain = %d' % (objectTrain))
 
     # Training start from here..........................................................................................
-    Dataset.DataOpts['data_phase'] = 'train'
-    allFolderNames = Dataset.GetAllFolderNames()
-    for epoch in xrange(0, NUM_EPOCH):
-        if epoch < START_EPOCH:     # We continue to train model from START_EPOCH
-            continue
-        for folderIdx, folderName in enumerate(allFolderNames):
-            Dataset.DataOpts['data_folder_name'] = folderName
-            Dataset.DataOpts['data_folder_type'] = 'gt'
-            allObjectIds = Dataset.GetAllObjectIds()
+    for epoch in xrange(START_EPOCH, NUM_EPOCH):
+        numBatchObjectIds = TrainData.__len__() // BATCH_SIZE
+        for batchObjectIdx in range(numBatchObjectIds):
+            # Get batch of object id
+            batchObjectIds = TrainData[batchObjectIdx * BATCH_SIZE: (batchObjectIdx + 1) * BATCH_SIZE]
 
-            # if epoch == 2 and folderName != 'MOT16-10':
-            #     continue
+            # Print information
+            print ('Load metadata of batch of objectIds...................')
+            for oneObjectId in batchObjectIds:
+                folderName = oneObjectId[0]
+                objectId   = oneObjectId[1]
+                print ('    Folder name = %s        ObjectId = %d' % (folderName, objectId))
 
-            numBatchObjectIds = allObjectIds.__len__() // BATCH_SIZE
-            for batchObjectIdx in range(numBatchObjectIds):
-                # if epoch == 2 and batchObjectIdx < 8:
-                #     continue
+            if epoch == START_EPOCH and objectTrain < startId:
+                objectTrain += 1
+                continue
 
-                # Get batch of object ids
-                batchObjectIds = allObjectIds[batchObjectIdx * BATCH_SIZE : (batchObjectIdx + 1) * BATCH_SIZE]
+            # Validate model
+            if objectTrain != 0 and objectTrain % VALIDATE_FREQUENCY == 0:
+                costValid = ValidModel(ValidData = ValidData)
 
-                # Print information
-                print ('Load metadata of batch of objectIds in folder %s ...................' % (folderName))
-                for objectId in batchObjectIds:
-                    print ('    ObjectId = %d' % (objectId))
+                IterValidRecord.append(iter)
+                CostValidRecord.append(costValid)
+                print (costValid)
 
-                # Get information of batch of object ids
-                imsPathBatch = []
-                bboxsBatch   = []
-                maxSequence  = 0
-                for objectId in batchObjectIds:
-                    Dataset.DataOpts['data_object_id'] = objectId
-                    imsPath, bboxs = Dataset.GetSequenceBy(occluderThres=0.5)
-                    imsPathBatch.append(imsPath)
-                    bboxsBatch.append(bboxs)
-                    maxSequence = max(maxSequence, imsPath.__len__())
-                for (imsPath, bboxs) in zip(imsPathBatch, bboxsBatch):
-                    if imsPath.__len__() < maxSequence:
-                        for id in range(maxSequence - imsPath.__len__()):
-                            imsPath.append('')
-                            bboxs.append([0, 0, 0, 0])
+            # Get information of batch of object ids
+            imsPathBatch, bboxsBatch, maxSequence = GetBatchMetaData(batchObjectIds = batchObjectIds)
 
-                # Reset status at the beginning of each sequence
-                S = startStateS; C = startStateC;
+            # Reset status at the beginning of each sequence
+            S = startStateS; C = startStateC;
 
-                # Iterate sequence of batch
-                numSequence  = (maxSequence - 1) // NUM_TRUNCATE
-                for sequenceIdx in range(numSequence):
-                    # Extract features of batch
-                    featureBatch  = numpy.zeros((BATCH_SIZE, NUM_TRUNCATE, 5461, 256), dtype='float32')
-                    heatmapXBatch = numpy.zeros((BATCH_SIZE, NUM_TRUNCATE, 5461, 1), dtype='float32')
-                    heatmapYBatch = numpy.zeros((BATCH_SIZE, NUM_TRUNCATE, 5461, 1), dtype='float32')
+            # Iterate sequence of batch
+            numSequence = (maxSequence - 1) // NUM_TRUNCATE
+            for sequenceIdx in range(numSequence):
+                if (IsPause):
+                    print ('Pause training process....................')
+                    while (1):
+                        input   = raw_input('Enter anything to resume...........')
+                        if input == 'r':
+                            IsPause = False
+                            break;
+                    print ('Resume !')
 
-                    for objectIdx in range(BATCH_SIZE):
-                        # Get sequence
-                        imsPathSequence = imsPathBatch[objectIdx][sequenceIdx * NUM_TRUNCATE: (sequenceIdx + 1) * NUM_TRUNCATE + 1]
-                        bboxsSequence   = bboxsBatch  [objectIdx][sequenceIdx * NUM_TRUNCATE: (sequenceIdx + 1) * NUM_TRUNCATE + 1]
+                inputBatch, heatmapXBatch, heatmapYBatch = GetBatchData(imsPathBatch = imsPathBatch,
+                                                                        bboxsBatch   = bboxsBatch,
+                                                                        sequenceIdx  = sequenceIdx)
 
-                        # Extract feature and prepare bounding box before training....
-                        featureSequence = FeatureFactory.ExtractFeature(imsPath = imsPathSequence, batchSize = NUM_TRUNCATE + 1)  # Extract sequence features
-                        heatmapSequence = CreateHeatmapSequence(DefaultBboxs, bboxsSequence)
+                iter += 1
+                result = LSTMModel.TrainFunc(inputBatch,
+                                             heatmapXBatch,
+                                             heatmapYBatch,
+                                             S, C)
+                cost = result[0]
+                newS = result[1 : 1 + BATCH_SIZE]
+                newC = result[1 + BATCH_SIZE : 1 + 2 * BATCH_SIZE]
+                costPos = result[1 + 2 * BATCH_SIZE]
+                costNeg = result[2 + 2 * BATCH_SIZE]
+                costs.append(cost)
+                costsPos.append(costPos)
+                costsNeg.append(costNeg)
+                print ('    Train mini sequence in a batch ! Done !')
 
-                        # for heatmap, bbox in zip(heatmapSequence, bboxsSequence):
-                        #     print ('%f %f %f %f %f' % (numpy.sum(heatmap), bbox[0], bbox[1], bbox[2], bbox[3]))
+                if iter % DISPLAY_FREQUENCY == 0:
+                    # Print information of current training in progress
+                    print (INFO_DISPLAY % (epoch, iter, numpy.mean(costs), numpy.mean(costsPos), numpy.mean(costsNeg)))
 
-                        featureSequence  = featureSequence[0: NUM_TRUNCATE]
-                        heatmapXSequence = heatmapSequence[0: NUM_TRUNCATE]
-                        heatmapYSequence = heatmapSequence[1: NUM_TRUNCATE + 1]
+                    # Plot result in progress
+                    IterTrainRecord.append(iter)
+                    CostTrainRecord.append(numpy.mean(costs))
+                    data.set_xdata(numpy.append(data.get_xdata(), IterTrainRecord[-1]))
+                    data.set_ydata(numpy.append(data.get_ydata(), CostTrainRecord[-1]))
+                    yLimit = math.floor(numpy.max(CostTrainRecord) / 10) * 10 + 3
+                    plt.axis([IterTrainRecord[-1000], IterTrainRecord[-1], 0, yLimit])
+                    plt.draw()
+                    plt.pause(0.05)
 
-                        featureBatch[objectIdx, :, :, :]  = featureSequence
-                        heatmapXBatch[objectIdx, :, :, :] = heatmapXSequence
-                        heatmapYBatch[objectIdx, :, :, :] = heatmapYSequence
-                    print ('    Load batch. Done !')
+                    # Empty costs for next visualization
+                    costs    = []
+                    costsPos = []
+                    costsNeg = []
 
-                    iter += 1
-                    result = LSTMModel.TrainFunc(featureBatch,
-                                                 heatmapXBatch,
-                                                 heatmapYBatch,
-                                                 S, C)
-                    cost = result[0]
-                    newS = result[1 : 1 + BATCH_SIZE]
-                    newC = result[1 + BATCH_SIZE : 1 + 2 * BATCH_SIZE]
-                    costs.append(cost)
-                    print ('    Train mini sequence in a batch ! Done !')
+                if iter % SAVE_FREQUENCY == 0:
+                    # Save model
+                    file = open(SAVE_PATH % (epoch, iter), 'wb')
+                    LSTMModel.SaveModel(file)
+                    file.close()
+                    print ('Save model !')
 
-                    if iter % DISPLAY_FREQUENCY == 0:
-                        # Print information of current training in progress
-                        print (INFO_DISPLAY % (epoch, iter, numpy.mean(costs)))
+                    # Save record
+                    file = open(FILE_RECORD, 'wb')
+                    pickle.dump(IterTrainRecord, file, 0)
+                    pickle.dump(CostTrainRecord, file, 0)
+                    pickle.dump(IterValidRecord, file, 0)
+                    pickle.dump(CostValidRecord, file, 0)
+                    file.close()
+                    print ('Save record !')
 
-                        # Plot result in progress
-                        iterVisualize.append(iter)
-                        costVisualize.append(numpy.mean(costs))
-                        data.set_xdata(numpy.append(data.get_xdata(), iterVisualize[-1]))
-                        data.set_ydata(numpy.append(data.get_ydata(), costVisualize[-1]))
-                        yLimit = math.floor(numpy.max(costVisualize) / 10) * 10 + 4
-                        plt.axis([START_ITERATION, iterVisualize[-1], 0, yLimit])
-                        plt.draw()
-                        plt.pause(0.05)
+                S = numpy.asarray(newS, dtype = 'float32');       C = numpy.asarray(newC, dtype = 'float32')
 
-                        # Empty costs for next visualization
-                        costs = []
-
-                    if iter % SAVE_FREQUENCY == 0:
-                        file = open(SAVE_PATH % (epoch, iter), 'wb')
-                        LSTMModel.SaveModel(file)
-                        file.close()
-                        print ('Save model !')
-
-                    S = numpy.asarray(newS, dtype = 'float32');       C = numpy.asarray(newC, dtype = 'float32')
+            objectTrain += 1
 
 def DrawHeatmap(imsPath, heatmaps):
     fig, ax = plt.subplots(2, 4)
@@ -405,8 +579,26 @@ def Draw(imsPath, bboxs):
 
         rect.remove()
 
+
+def WaitEvent(threadName):
+    global IsPause
+
+    print ('Start pause event')
+
+    while (1):
+        input = raw_input()
+        if input == 'p':
+            IsPause = True
+
+def CreatePauseEvent():
+    try:
+        thread.start_new_thread(WaitEvent, ('Thread wait',))
+    except:
+        print ('Error: unable to start thread')
+
 if __name__ == '__main__':
+    CreatePauseEvent()
     LoadDataset()
-    CreateLSTMModel()
     CreateSSDExtractFactory()
+    CreateLSTMModel()
     TrainModel()
