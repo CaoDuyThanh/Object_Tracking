@@ -10,7 +10,7 @@ class NeuralNet():
         self.NetOpts['rng_seed']         = 1610
         self.NetOpts['rng']              = numpy.random.RandomState(self.NetOpts['rng_seed'])
         self.NetOpts['theano_rng']       = RandomStreams(self.NetOpts['rng'].randint(2 ** 30))
-        self.NetOpts['learning_rate']    = numpy.asarray(0.0005, theano.config.floatX)
+        self.NetOpts['learning_rate']    = numpy.asarray(0.00005, theano.config.floatX)
         self.NetOpts['batch_size']       = 1
 
         self.LayerOpts = {}
@@ -61,7 +61,7 @@ class NeuralNet():
         # Adam update
         self.UpdateOpts['adam_beta1'] = 0.9
         self.UpdateOpts['adam_beta2'] = 0.999
-        self.UpdateOpts['adam_delta'] = 0.000001
+        self.UpdateOpts['adam_delta'] = 0.00000001
 
 
         # Network name for saving
