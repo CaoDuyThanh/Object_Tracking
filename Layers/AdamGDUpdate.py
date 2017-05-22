@@ -1,5 +1,6 @@
 import theano
 import theano.tensor as T
+import numpy
 
 class AdamGDUpdate():
     def __init__(self,
@@ -12,22 +13,29 @@ class AdamGDUpdate():
         self.Delta        = net.UpdateOpts['adam_delta']
         self.LearningRate = net.NetOpts['learning_rate']
 
+        print (self.LearningRate)
 
-        updates = []
+        self.Params = []
+        updates     = []
+        i   = theano.shared(numpy.float32(31500.))
+        i_t = i + 1
         for (param, grad) in zip(params, grads):
             mt = theano.shared(param.get_value() * 0., broadcastable=param.broadcastable)
             vt = theano.shared(param.get_value() * 0., broadcastable=param.broadcastable)
+            self.Params.append(mt)
+            self.Params.append(vt)
 
             newMt = self.Beta1 * mt + (1 - self.Beta1) * grad
             newVt = self.Beta2 * vt + (1 - self.Beta2) * T.sqr(grad)
 
-            tempMt = newMt / (1 - self.Beta1)
-            tempVt = newVt / (1 - self.Beta2)
+            tempMt = newMt / (1 - self.Beta1 ** i_t)
+            tempVt = newVt / (1 - self.Beta2 ** i_t)
 
             step = - self.LearningRate * tempMt / (T.sqrt(tempVt) + self.Delta)
             updates.append((mt, newMt))
             updates.append((vt, newVt))
             updates.append((param, param + step))
+        updates.append((i, i_t))
 
         self.Updates = updates
 
