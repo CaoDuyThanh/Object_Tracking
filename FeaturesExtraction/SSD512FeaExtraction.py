@@ -13,14 +13,14 @@ class SSD512FeaExtraction():
         #       Create model               #
         ####################################
         # Create tensor variables to store input / output data
-        X = T.tensor4('X')
+        self.X = T.tensor4('X')
 
         # Create shared variable for input
         net = ConvNeuralNet()
         net.NetName = 'SSD512CustomNet'
 
         # Input
-        net.Layer['input_4d'] = InputLayer(net, X)
+        net.Layer['input_4d'] = InputLayer(net, self.X)
         # net.LayerOpts['reshape_new_shape'] = (net.NetOpts['batch_size'], 3, 512, 512)
         # net.Layer['input_4d'] = ReshapeLayer(net, net.Layer['input'].Output)
 
@@ -125,9 +125,9 @@ class SSD512FeaExtraction():
         net.Layer['conv4_3_norm'] = NormalizeLayer(net, net.Layer['relu4_3'].Output)
 
         # conv4_3_norm_encode
-        net.LayerOpts['conv2D_filter_shape'] = (256, 512, 1, 1)
+        net.LayerOpts['conv2D_filter_shape'] = (1, 512, 3, 3)
         net.LayerOpts['conv2D_stride']       = (1, 1)
-        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_border_mode']  = (1, 1)
         net.LayerOpts['conv2D_WName'] = 'conv4_3_norm_encode_W'
         net.LayerOpts['conv2D_bName'] = 'conv4_3_norm_encode_b'
         net.Layer['conv4_3_norm_encode']      = ConvLayer(net, net.Layer['conv4_3_norm'].Output)
@@ -190,9 +190,9 @@ class SSD512FeaExtraction():
         net.Layer['relu7'] = ReLULayer(net.Layer['fc7'].Output)
 
         # fc7_encode
-        net.LayerOpts['conv2D_filter_shape'] = (256, 1024, 1, 1)
+        net.LayerOpts['conv2D_filter_shape'] = (1, 1024, 3, 3)
         net.LayerOpts['conv2D_stride']       = (1, 1)
-        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_border_mode']  = (1, 1)
         net.LayerOpts['conv2D_WName'] = 'fc7_encode_W'
         net.LayerOpts['conv2D_bName'] = 'fc7_encode_b'
         net.Layer['fc7_encode']      = ConvLayer(net, net.Layer['relu7'].Output)
@@ -224,9 +224,9 @@ class SSD512FeaExtraction():
 
         # Second sub convolution to get predicted box
         # conv6_2_encode
-        net.LayerOpts['conv2D_filter_shape'] = (256, 512, 1, 1)
+        net.LayerOpts['conv2D_filter_shape'] = (1, 512, 3, 3)
         net.LayerOpts['conv2D_stride']       = (1, 1)
-        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_border_mode']  = (1, 1)
         net.LayerOpts['conv2D_WName'] = 'conv6_2_encode_W'
         net.LayerOpts['conv2D_bName'] = 'conv6_2_encode_b'
         net.Layer['conv6_2_encode']      = ConvLayer(net, net.Layer['conv6_2_relu'].Output)
@@ -255,11 +255,20 @@ class SSD512FeaExtraction():
         net.Layer['conv7_2']      = ConvLayer(net, net.Layer['conv7_1_relu'].Output)
         net.Layer['conv7_2_relu'] = ReLULayer(net.Layer['conv7_2'].Output)
 
-        # conv7_2_relu_flat
+        # conv7_2_encode
+        net.LayerOpts['conv2D_filter_shape'] = (1, 256, 3, 3)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (1, 1)
+        net.LayerOpts['conv2D_WName'] = 'conv7_2_encode_W'
+        net.LayerOpts['conv2D_bName'] = 'conv7_2_encode_b'
+        net.Layer['conv7_2_encode']      = ConvLayer(net, net.Layer['conv7_2_relu'].Output)
+        net.Layer['conv7_2_encode_relu'] = ReLULayer(net.Layer['conv7_2_encode'].Output)
+
+        # conv7_2_encode_flat
         net.LayerOpts['permute_dimension'] = (0, 2, 3, 1)
-        net.Layer['conv7_2_relu_perm']     = PermuteLayer(net, net.Layer['conv7_2_relu'].Output)
-        net.LayerOpts['flatten_ndim']  = 2
-        net.Layer['conv7_2_relu_flat'] = FlattenLayer(net, net.Layer['conv7_2_relu_perm'].Output)
+        net.Layer['conv7_2_encode_perm']   = PermuteLayer(net, net.Layer['conv7_2_encode_relu'].Output)
+        net.LayerOpts['flatten_ndim']    = 2
+        net.Layer['conv7_2_encode_flat'] = FlattenLayer(net, net.Layer['conv7_2_encode_perm'].Output)
 
         # Third sub convolution to get predicted box
         # conv8_1 and conv8_2
@@ -279,11 +288,20 @@ class SSD512FeaExtraction():
         net.Layer['conv8_2']      = ConvLayer(net, net.Layer['conv8_1_relu'].Output)
         net.Layer['conv8_2_relu'] = ReLULayer(net.Layer['conv8_2'].Output)
 
-        # conv8_2_relu_flat
+        # conv8_2_encode
+        net.LayerOpts['conv2D_filter_shape'] = (1, 256, 3, 3)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (1, 1)
+        net.LayerOpts['conv2D_WName'] = 'conv8_2_encode_W'
+        net.LayerOpts['conv2D_bName'] = 'conv8_2_encode_b'
+        net.Layer['conv8_2_encode']      = ConvLayer(net, net.Layer['conv8_2_relu'].Output)
+        net.Layer['conv8_2_encode_relu'] = ReLULayer(net.Layer['conv8_2_encode'].Output)
+
+        # conv8_2_encode_flat
         net.LayerOpts['permute_dimension'] = (0, 2, 3, 1)
-        net.Layer['conv8_2_relu_perm']     = PermuteLayer(net, net.Layer['conv8_2_relu'].Output)
-        net.LayerOpts['flatten_ndim']  = 2
-        net.Layer['conv8_2_relu_flat'] = FlattenLayer(net, net.Layer['conv8_2_relu_perm'].Output)
+        net.Layer['conv8_2_encode_perm']   = PermuteLayer(net, net.Layer['conv8_2_encode_relu'].Output)
+        net.LayerOpts['flatten_ndim']    = 2
+        net.Layer['conv8_2_encode_flat'] = FlattenLayer(net, net.Layer['conv8_2_encode_perm'].Output)
 
         # Fourth sub convolution to get predicted box
         # conv9_1 and conv9_2
@@ -303,11 +321,20 @@ class SSD512FeaExtraction():
         net.Layer['conv9_2']      = ConvLayer(net, net.Layer['conv9_1_relu'].Output)
         net.Layer['conv9_2_relu'] = ReLULayer(net.Layer['conv9_2'].Output)
 
-        # conv9_2_relu_flat
+        # conv9_2_encode
+        net.LayerOpts['conv2D_filter_shape'] = (1, 256, 3, 3)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (1, 1)
+        net.LayerOpts['conv2D_WName'] = 'conv9_2_encode_W'
+        net.LayerOpts['conv2D_bName'] = 'conv9_2_encode_b'
+        net.Layer['conv9_2_encode']      = ConvLayer(net, net.Layer['conv9_2_relu'].Output)
+        net.Layer['conv9_2_encode_relu'] = ReLULayer(net.Layer['conv9_2_encode'].Output)
+
+        # conv9_2_encode_flat
         net.LayerOpts['permute_dimension'] = (0, 2, 3, 1)
-        net.Layer['conv9_2_relu_perm']     = PermuteLayer(net, net.Layer['conv9_2_relu'].Output)
-        net.LayerOpts['flatten_ndim']  = 2
-        net.Layer['conv9_2_relu_flat'] = FlattenLayer(net, net.Layer['conv9_2_relu_perm'].Output)
+        net.Layer['conv9_2_encode_perm']   = PermuteLayer(net, net.Layer['conv9_2_encode_relu'].Output)
+        net.LayerOpts['flatten_ndim']    = 2
+        net.Layer['conv9_2_encode_flat'] = FlattenLayer(net, net.Layer['conv9_2_encode_perm'].Output)
 
         # Fourth sub convolution to get predicted box
         # conv10_1 and conv10_2
@@ -327,28 +354,37 @@ class SSD512FeaExtraction():
         net.Layer['conv10_2']      = ConvLayer(net, net.Layer['conv10_1_relu'].Output)
         net.Layer['conv10_2_relu'] = ReLULayer(net.Layer['conv10_2'].Output)
 
-        # conv10_2_relu_flat
+        # conv10_2_encode
+        net.LayerOpts['conv2D_filter_shape'] = (1, 256, 3, 3)
+        net.LayerOpts['conv2D_stride']       = (1, 1)
+        net.LayerOpts['conv2D_border_mode']  = (1, 1)
+        net.LayerOpts['conv2D_WName'] = 'conv10_2_encode_W'
+        net.LayerOpts['conv2D_bName'] = 'conv10_2_encode_b'
+        net.Layer['conv10_2_encode']      = ConvLayer(net, net.Layer['conv10_2_relu'].Output)
+        net.Layer['conv10_2_encode_relu'] = ReLULayer(net.Layer['conv10_2_encode'].Output)
+
+        # conv10_2_encode_flat
         net.LayerOpts['permute_dimension'] = (0, 2, 3, 1)
-        net.Layer['conv10_2_relu_perm'] = PermuteLayer(net, net.Layer['conv10_2_relu'].Output)
-        net.LayerOpts['flatten_ndim']   = 2
-        net.Layer['conv10_2_relu_flat'] = FlattenLayer(net, net.Layer['conv10_2_relu_perm'].Output)
+        net.Layer['conv10_2_encode_perm']  = PermuteLayer(net, net.Layer['conv10_2_encode_relu'].Output)
+        net.LayerOpts['flatten_ndim']     = 2
+        net.Layer['conv10_2_encode_flat'] = FlattenLayer(net, net.Layer['conv10_2_encode_perm'].Output)
 
         # Concat features
         net.Layer['features'] = ConcatLayer(net, [net.Layer['conv4_3_norm_encode_flat'].Output,
                                                   net.Layer['fc7_encode_flat'].Output,
                                                   net.Layer['conv6_2_encode_flat'].Output,
-                                                  net.Layer['conv7_2_relu_flat'].Output,
-                                                  net.Layer['conv8_2_relu_flat'].Output,
-                                                  net.Layer['conv9_2_relu_flat'].Output,
-                                                  net.Layer['conv10_2_relu_flat'].Output])
+                                                  net.Layer['conv7_2_encode_flat'].Output,
+                                                  net.Layer['conv8_2_encode_flat'].Output,
+                                                  net.Layer['conv9_2_encode_flat'].Output,
+                                                  net.Layer['conv10_2_encode_flat'].Output])
 
-        net.LayerOpts['reshape_new_shape'] = (net.Layer['input_4d'].Output.shape[0], 5461, 256)
+        net.LayerOpts['reshape_new_shape'] = (net.Layer['input_4d'].Output.shape[0], 5461, 1)
         net.Layer['features_reshape']      = ReshapeLayer(net, net.Layer['features'].Output)
 
         self.Net = net
 
-        self.FeatureFunc = theano.function(inputs  = [X],
-                                           outputs = [net.Layer['features_reshape'].Output])
+        # self.FeatureFunc = theano.function(inputs  = [X],
+        #                                    outputs = [net.Layer['features_reshape'].Output])
 
     def GetDefaultBbox(self,
                        imageWidth,
