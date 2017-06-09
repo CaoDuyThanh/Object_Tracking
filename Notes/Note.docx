@@ -1,0 +1,13 @@
+﻿V2_Encode:
+Feature extraction model:
+	- Use SSD300 to extract feature
+	- Encode layer conv4_3, fc7 and layer conv6_2 into same size output which length = 256
+
+Tracking model
+	- Use LSTM contains 2 module: encode and decode
+	- Encode model take input as feature and boundbox from all level in SSD model (6 level) and boundbox coresponding to its anchor box
+
+Anchor box:
+	- When encode model: object which its center in the region of a anchor box belong to that anchor
+	- When encode model: because there are many anchor box which object belong to in the same level so we will randomly choose an anchor at each training time.
+	- When decode model: all anchor box belong to object will be mark as 1 and error coresponding each anchor box will be used to calculate loss function.
