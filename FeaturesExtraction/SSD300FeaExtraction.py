@@ -9,23 +9,19 @@ from Layers.LayerHelper import *
 
 
 class SSD300FeaExtraction():
-    def __init__(self,
-                 batchSize):
+    def __init__(self):
         ####################################
         #       Create model               #
         ####################################
         # Create tensor variables to store input / output data
-        X = T.tensor4('X')
+        self.X = T.tensor4('X')
 
         # Create shared variable for input
         net = ConvNeuralNet()
         net.NetName = 'VGG16CustomNet'
-        net.NetOpts['batch_size'] = batchSize
 
         # Input
-        net.Layer['input'] = InputLayer(net, X)
-        net.LayerOpts['reshape_new_shape'] = (net.NetOpts['batch_size'], 3, 300, 300)
-        net.Layer['input_4d'] = ReshapeLayer(net, net.Layer['input'].Output)
+        net.Layer['input_4d'] = InputLayer(net, self.X)
 
         net.LayerOpts['pool_boder_mode']    = 1
         net.LayerOpts['conv2D_border_mode'] = 1
@@ -128,16 +124,17 @@ class SSD300FeaExtraction():
         net.Layer['conv4_3_norm'] = NormalizeLayer(net, net.Layer['relu4_3'].Output)
 
         # conv4_3_norm_encode
-        net.LayerOpts['conv2D_filter_shape'] = (256, 512, 1, 1)
+        net.LayerOpts['conv2D_filter_shape'] = (256, 512, 3, 3)
         net.LayerOpts['conv2D_stride']       = (1, 1)
-        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_border_mode']  = (1, 1)
         net.LayerOpts['conv2D_WName'] = 'conv4_3_norm_encode_W'
         net.LayerOpts['conv2D_bName'] = 'conv4_3_norm_encode_b'
-        net.Layer['conv4_3_norm_encode'] = ConvLayer(net, net.Layer['conv4_3_norm'].Output)
+        net.Layer['conv4_3_norm_encode']      = ConvLayer(net, net.Layer['conv4_3_norm'].Output)
+        net.Layer['conv4_3_norm_encode_relu'] = ReLULayer(net.Layer['conv4_3_norm_encode'].Output)
 
         # conv4_3_norm_flat
         net.LayerOpts['permute_dimension']    = (0, 2, 3, 1)
-        net.Layer['conv4_3_norm_encode_perm'] = PermuteLayer(net, net.Layer['conv4_3_norm_encode'].Output)
+        net.Layer['conv4_3_norm_encode_perm'] = PermuteLayer(net, net.Layer['conv4_3_norm_encode_relu'].Output)
         net.LayerOpts['flatten_ndim'] = 2
         net.Layer['conv4_3_norm_encode_flat'] = FlattenLayer(net, net.Layer['conv4_3_norm_encode_perm'].Output)
 
@@ -192,16 +189,17 @@ class SSD300FeaExtraction():
         net.Layer['relu7'] = ReLULayer(net.Layer['fc7'].Output)
 
         # fc7_encode
-        net.LayerOpts['conv2D_filter_shape'] = (256, 1024, 1, 1)
+        net.LayerOpts['conv2D_filter_shape'] = (256, 1024, 3, 3)
         net.LayerOpts['conv2D_stride']       = (1, 1)
-        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_border_mode']  = (1, 1)
         net.LayerOpts['conv2D_WName'] = 'fc7_encode_W'
         net.LayerOpts['conv2D_bName'] = 'fc7_encode_b'
-        net.Layer['fc7_encode'] = ConvLayer(net, net.Layer['relu7'].Output)
+        net.Layer['fc7_encode']      = ConvLayer(net, net.Layer['relu7'].Output)
+        net.Layer['fc7_encode_relu'] = ReLULayer(net.Layer['fc7_encode'].Output)
 
         # fc7_encode_flat
         net.LayerOpts['permute_dimension'] = (0, 2, 3, 1)
-        net.Layer['fc7_encode_perm']       = PermuteLayer(net, net.Layer['fc7_encode'].Output)
+        net.Layer['fc7_encode_perm']       = PermuteLayer(net, net.Layer['fc7_encode_relu'].Output)
         net.LayerOpts['flatten_ndim'] = 2
         net.Layer['fc7_encode_flat']  = FlattenLayer(net, net.Layer['fc7_encode_perm'].Output)
 
@@ -225,16 +223,17 @@ class SSD300FeaExtraction():
 
         # Second sub convolution to get predicted box
         # conv6_2_encode
-        net.LayerOpts['conv2D_filter_shape'] = (256, 512, 1, 1)
+        net.LayerOpts['conv2D_filter_shape'] = (256, 512, 3, 3)
         net.LayerOpts['conv2D_stride']       = (1, 1)
-        net.LayerOpts['conv2D_border_mode']  = (0, 0)
+        net.LayerOpts['conv2D_border_mode']  = (1, 1)
         net.LayerOpts['conv2D_WName'] = 'conv6_2_encode_W'
         net.LayerOpts['conv2D_bName'] = 'conv6_2_encode_b'
-        net.Layer['conv6_2_encode'] = ConvLayer(net, net.Layer['conv6_2_relu'].Output)
+        net.Layer['conv6_2_encode']      = ConvLayer(net, net.Layer['conv6_2_relu'].Output)
+        net.Layer['conv6_2_encode_relu'] = ReLULayer(net.Layer['conv6_2_encode'].Output)
 
         # conv6_2_encode_flat
         net.LayerOpts['permute_dimension'] = (0, 2, 3, 1)
-        net.Layer['conv6_2_encode_perm']   = PermuteLayer(net, net.Layer['conv6_2_encode'].Output)
+        net.Layer['conv6_2_encode_perm']   = PermuteLayer(net, net.Layer['conv6_2_encode_relu'].Output)
         net.LayerOpts['flatten_ndim']    = 2
         net.Layer['conv6_2_encode_flat'] = FlattenLayer(net, net.Layer['conv6_2_encode_perm'].Output)
 
@@ -322,7 +321,7 @@ class SSD300FeaExtraction():
 
         self.Net = net
 
-        self.FeatureFunc = theano.function(inputs  = [X],
+        self.FeatureFunc = theano.function(inputs  = [self.X],
                                            outputs = [net.Layer['features_reshape'].Output])
 
     def GetDefaultBbox(self,
@@ -337,7 +336,7 @@ class SSD300FeaExtraction():
         maxSizes = []
         step     = int(math.floor((sMax - sMin) / (len(layerSizes) - 1)))
         for ratio in xrange(sMin, sMax + 1, step):
-            minSizes.append(imageWidth *  ratio         / 100.)
+            minSizes.append(imageWidth * ratio          / 100.)
             maxSizes.append(imageWidth * (ratio + step) / 100.)
 
         defaultBboxs = []
@@ -350,77 +349,60 @@ class SSD300FeaExtraction():
             maxSize = maxSizes[k]
 
             if numbox == 4:
-                aspectRatio = [1., 2., 1. / 2.]
+                aspectRatio = [1.]
             else:
-                aspectRatio = [1., 2., 1. / 2., 3., 1. / 3.]
+                aspectRatio = [1.]
             stepW = stepH = steps[k]
             for h in range(layerHeight):
                 for w in range(layerWidth):
                     centerX = (w + offset) * stepW
                     centerY = (h + offset) * stepH
 
-                    defaultBbox = []
                     # first prior: aspect_ratio = 1, size = min_size
-                    boxWidth = boxHeight = minSize
+                    # boxWidth = boxHeight = math.sqrt(minSize * maxSize);
+                    boxWidth = boxHeight = minSize;
                     # cx | cy
                     cx = centerX / imageWidth
                     cy = centerY / imageWidth
                     # width | height
-                    width  = boxWidth / imageWidth
+                    width = boxWidth / imageWidth
                     height = boxHeight / imageWidth
-                    defaultBbox.append([cx, cy, width, height])
-
-                    if maxSizes.__len__() > 0:
-                        # second prior: aspect_ratio = 1, size = sqrt(min_size * max_size)
-                        boxWidth = boxHeight = math.sqrt(minSize * maxSize);
-                        # cx | cy
-                        cx = centerX / imageWidth
-                        cy = centerY / imageWidth
-                        # width | height
-                        width = boxWidth / imageWidth
-                        height = boxHeight / imageWidth
-                        defaultBbox.append([cx, cy, width, height])
-
-                    for ar in aspectRatio:
-                        if ar == 1:
-                            continue
-
-                        boxWidth  = minSize * math.sqrt(ar)
-                        boxHeight = minSize / math.sqrt(ar)
-
-                        # cx | cy
-                        cx = centerX / imageWidth
-                        cy = centerY / imageWidth
-                        # width | height
-                        width = boxWidth / imageWidth
-                        height = boxHeight / imageWidth
-                        defaultBbox.append([cx, cy, width, height])
-
-                    defaultBboxs.append(defaultBbox)
+                    defaultBboxs.append([cx, cy, width, height])
 
         # Convert default bboxs to numpy array
         defaultBboxs = numpy.asarray(defaultBboxs, dtype = 'float32')
         return defaultBboxs
 
     def ExtractFeature(self,
-                       imsPath):
+                       imsPath,
+                       batchSize):
         ims = []
+        numHasData = 0
         for imPath in imsPath:
-            extension = imPath.split('.')[-1]
-            im = plt.imread(imPath, extension)
-            im = skimage.transform.resize(im, (300, 300), preserve_range=True)
-            im = im[:, :, [2, 1, 0]]
-            im = numpy.transpose(im, (2, 0, 1))
-            ims.append(im)
-        ims = numpy.asarray(ims, dtype = 'float32')
+            if imPath != '':
+                extension = imPath.split('.')[-1]
+                im = plt.imread(imPath, extension)
+                im = skimage.transform.resize(im, (300, 300), preserve_range=True)
+                im = im[:, :, [2, 1, 0]]
+                im = numpy.transpose(im, (2, 0, 1))
+                ims.append(im)
+                numHasData += 1
+        ims = numpy.asarray(ims, dtype='float32')
 
-        VGG_MEAN = numpy.asarray([103.939, 116.779, 123.68], dtype = 'float32')
+        VGG_MEAN = numpy.asarray([103.939, 116.779, 123.68], dtype='float32')
         VGG_MEAN = numpy.reshape(VGG_MEAN, (1, 3, 1, 1))
 
         ims = ims - VGG_MEAN
 
-        SSDfeatures = self.FeatureFunc(ims)
-        return SSDfeatures[0]
+        if numHasData != 0:
+            SSDfeatures = self.FeatureFunc(ims)
+            feature     = SSDfeatures[0]
+        else:
+            numHasData = batchSize
+            feature    = numpy.zeros((batchSize, 1940, 256), dtype='float32')
+        feature = numpy.pad(feature, ((0, batchSize - numHasData), (0, 0), (0, 0)), mode='constant', constant_values=0)
+
+        return feature
 
     def LoadCaffeModel(self,
                        caffePrototxtPath,
