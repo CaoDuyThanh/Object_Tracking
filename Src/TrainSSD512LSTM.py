@@ -293,13 +293,6 @@ def TrainModel():
                         predictLocAves.append(predictLocAve)
                         predictNegAves.append(predictNegAve)
 
-                        # Check ratioPosNeg
-                        # if iter % DISPLAY_FREQUENCY == 0:
-                        #     if numpy.mean(predictPostAves) < 0.5:
-                        #         RatioPosNeg = 1. / 3
-                        #     else:
-                        #         RatioPosNeg = 3
-
                         if iter % DISPLAY_FREQUENCY == 0:
                             print ('Epoch = %d, iteration = %d, cost = %f, predictPosAve = %f, predictLocAve = %f, predictNegAve = %f. ObjectId = %d' % (epoch, iter, numpy.mean(costs),
                                                                                                                                      numpy.mean(predictPostAves),
