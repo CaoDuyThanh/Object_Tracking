@@ -43,8 +43,8 @@ class MOTDataHelper(DatasetHelper):
         width    = bottomRightX - topLeftX
         height   = bottomRightY - topLeftY
 
-        cx     = cx * 1. / realWidth
-        cy     = cy * 1. / realHeight
+        cx     = cx * 1. / realWidth + 0.000001
+        cy     = cy * 1. / realHeight + 0.000001
         width  = width * 1. / realWidth
         height = height * 1. / realHeight
 
@@ -216,7 +216,12 @@ class MOTDataHelper(DatasetHelper):
 
     def GetRandomBbox(self):
         if self.DataOpts['data_phase'] == 'train':
-            assert 'Do not support get random object from train'
+            folderName = self.DataOpts['data_folder_name']
+            folderType = self.DataOpts['data_folder_type']
+            data = self.TrainData[folderName][folderType]
+            firstFrames = data['frames'][1]
+            ranObject = firstFrames[1]
+            return data['framespath'], ranObject
 
         if self.DataOpts['data_phase'] == 'test':
             folderName   = self.DataOpts['data_folder_name']
@@ -259,8 +264,6 @@ class MOTDataHelper(DatasetHelper):
                     if currentFrame[objectId][7] >= occluderThres:
                         imsPath.append(currentFrame[objectId][-1])
                         bbox.append(currentFrame[objectId][1:5])
-                else:
-                    break;
                 frameStart += 1
 
             return imsPath, bbox
